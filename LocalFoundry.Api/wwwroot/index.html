@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LocalFoundry.Api Test Console</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2f3a;
+    --text: #e6e8eb;
+    --muted: #9aa3af;
+    --accent: #4f8cff;
+    --accent-hover: #6fa1ff;
+    --ok: #3ddc97;
+    --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 2rem;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+  .subtitle { color: var(--muted); margin: 0 0 1.5rem; font-size: 0.9rem; }
+  .status-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    align-items: center;
+  }
+  .badge {
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    border: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .badge.ok { color: var(--ok); border-color: var(--ok); }
+  .badge.err { color: var(--err); border-color: var(--err); }
+  .badge.pending { color: var(--muted); }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 1.25rem;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.1rem 1.2rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+  }
+  .card h2 {
+    font-size: 1rem;
+    margin: 0 0 0.25rem;
+  }
+  .card .desc {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin: 0 0 0.9rem;
+  }
+  textarea, input[type=text] {
+    width: 100%;
+    background: #0d0f13;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 0.7rem;
+    font-family: inherit;
+    font-size: 0.9rem;
+    resize: vertical;
+  }
+  textarea { min-height: 60px; }
+  button {
+    margin-top: 0.7rem;
+    align-self: flex-start;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: var(--accent-hover); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .output {
+    margin-top: 0.9rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #0d0f13;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.7rem 0.8rem;
+    font-size: 0.85rem;
+    min-height: 2.4rem;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .output.err { color: var(--err); border-color: var(--err); }
+  .output.empty { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th, td { text-align: left; padding: 0.3rem 0.4rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; }
+  .models-wrap { max-height: 260px; overflow-y: auto; margin-top: 0.5rem; }
+</style>
+</head>
+<body>
+
+<h1>LocalFoundry.Api Test Console</h1>
+<p class="subtitle">Plain HTML + JS page hitting the API's own endpoints (same origin, no CORS setup needed).</p>
+
+<div class="status-bar">
+  <span id="api-badge" class="badge pending">API: checking…</span>
+  <span id="foundry-badge" class="badge pending">Foundry Local: checking…</span>
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>Chat &mdash; Microsoft.Extensions.AI</h2>
+    <p class="desc">POST /api/chat &mdash; IChatClient adapted from Semantic Kernel.</p>
+    <textarea id="chat-input">What is the capital of France?</textarea>
+    <button id="chat-send">Send</button>
+    <div id="chat-output" class="output empty">Response will appear here.</div>
+  </div>
+
+  <div class="card">
+    <h2>Streaming Chat &mdash; Microsoft.Extensions.AI</h2>
+    <p class="desc">POST /api/chat/stream &mdash; tokens appended live as they arrive.</p>
+    <textarea id="stream-input">Write a short haiku about local AI.</textarea>
+    <button id="stream-send">Send (stream)</button>
+    <div id="stream-output" class="output empty">Response will appear here.</div>
+  </div>
+
+  <div class="card">
+    <h2>Agent &mdash; Semantic Kernel</h2>
+    <p class="desc">POST /api/agent &mdash; function-calling enabled (TimePlugin).</p>
+    <textarea id="agent-input">What time is it right now?</textarea>
+    <button id="agent-send">Ask agent</button>
+    <div id="agent-output" class="output empty">Response will appear here.</div>
+  </div>
+
+  <div class="card">
+    <h2>Model Catalog &mdash; Foundry Local</h2>
+    <p class="desc">GET /api/foundry/models &mdash; native SDK catalog listing.</p>
+    <button id="models-refresh">Refresh list</button>
+    <div id="models-output" class="output empty">Click refresh to load.</div>
+  </div>
+
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  async function readProblemDetail(res) {
+    try {
+      const body = await res.json();
+      return body.detail || body.title || JSON.stringify(body);
+    } catch {
+      return await res.text().catch(() => res.statusText);
+    }
+  }
+
+  function setOutput(el, text, isError) {
+    el.textContent = text;
+    el.classList.toggle('err', !!isError);
+    el.classList.toggle('empty', !text);
+  }
+
+  function wireSimpleEndpoint({ buttonId, inputId, outputId, url }) {
+    const button = $(buttonId);
+    const input = $(inputId);
+    const output = $(outputId);
+
+    button.addEventListener('click', async () => {
+      const message = input.value.trim();
+      if (!message) return;
+
+      button.disabled = true;
+      setOutput(output, 'Thinking…', false);
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message }),
+        });
+
+        if (!res.ok) {
+          setOutput(output, `Error ${res.status}: ${await readProblemDetail(res)}`, true);
+          return;
+        }
+
+        const data = await res.json();
+        setOutput(output, data.reply, false);
+      } catch (err) {
+        setOutput(output, `Request failed: ${err.message}`, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
+  wireSimpleEndpoint({ buttonId: 'chat-send', inputId: 'chat-input', outputId: 'chat-output', url: '/api/chat' });
+  wireSimpleEndpoint({ buttonId: 'agent-send', inputId: 'agent-input', outputId: 'agent-output', url: '/api/agent' });
+
+  $('stream-send').addEventListener('click', async () => {
+    const button = $('stream-send');
+    const input = $('stream-input');
+    const output = $('stream-output');
+    const message = input.value.trim();
+    if (!message) return;
+
+    button.disabled = true;
+    setOutput(output, '', false);
+
+    try {
+      const res = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+
+      if (!res.ok || !res.body) {
+        setOutput(output, `Error ${res.status}: ${await readProblemDetail(res)}`, true);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+        setOutput(output, text, false);
+      }
+
+      if (!text) setOutput(output, '(empty response)', false);
+    } catch (err) {
+      setOutput(output, `Request failed: ${err.message}`, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  async function loadModels() {
+    const output = $('models-output');
+    const badge = $('foundry-badge');
+    setOutput(output, 'Loading…', false);
+
+    try {
+      const res = await fetch('/api/foundry/models');
+      if (!res.ok) {
+        const detail = await readProblemDetail(res);
+        setOutput(output, `Error ${res.status}: ${detail}`, true);
+        badge.textContent = 'Foundry Local: unreachable';
+        badge.className = 'badge err';
+        return;
+      }
+
+      const models = await res.json();
+      badge.textContent = `Foundry Local: ${models.length} models cataloged`;
+      badge.className = 'badge ok';
+
+      if (!models.length) {
+        setOutput(output, '(no models found)', false);
+        return;
+      }
+
+      const rows = models
+        .map((m) => `<tr><td>${m.alias}</td><td>${m.id}</td></tr>`)
+        .join('');
+      output.classList.remove('empty', 'err');
+      output.innerHTML = `<div class="models-wrap"><table><thead><tr><th>Alias</th><th>Id</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    } catch (err) {
+      setOutput(output, `Request failed: ${err.message}`, true);
+      badge.textContent = 'Foundry Local: unreachable';
+      badge.className = 'badge err';
+    }
+  }
+
+  $('models-refresh').addEventListener('click', loadModels);
+
+  async function checkApi() {
+    const badge = $('api-badge');
+    try {
+      const res = await fetch('/api/info');
+      if (res.ok) {
+        badge.textContent = 'API: online';
+        badge.className = 'badge ok';
+      } else {
+        badge.textContent = `API: HTTP ${res.status}`;
+        badge.className = 'badge err';
+      }
+    } catch (err) {
+      badge.textContent = 'API: unreachable';
+      badge.className = 'badge err';
+    }
+  }
+
+  checkApi();
+  loadModels();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,62 @@
+## Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.log
+
+## Visual Studio
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.userprefs
+*.dbmdl
+*.jfm
+
+## Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+## JetBrains Rider
+.idea/
+*.sln.iml
+
+## User-specific & Environment files
+*.local.json
+appsettings.*.local.json
+appsettings.Production.json
+appsettings.Secret.json
+secrets.json
+
+## AI & Assistant workspace folders
+.claude/
+.gemini/
+.copilot/
+
+## Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+## Package caches & test results
+*.nuget.props
+*.nuget.targets
+TestResults/
+coverage*.xml
+coverage*.json

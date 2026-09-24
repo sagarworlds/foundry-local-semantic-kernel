@@ -19,7 +19,7 @@ public static class ChatRequestValidator
     /// </summary>
     /// <param name="request">The request to validate; may be <see langword="null"/> if the body was empty.</param>
     /// <returns>
-    /// Validation errors keyed by field name (the shape expected by <see cref="Results.ValidationProblem"/>);
+    /// Validation errors keyed by field name (the shape expected by <c>Results.ValidationProblem</c>);
     /// empty when the request is valid.
     /// </returns>
     public static IDictionary<string, string[]> Validate(ChatRequest? request)

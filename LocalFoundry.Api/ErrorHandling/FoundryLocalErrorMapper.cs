@@ -12,11 +12,15 @@ namespace LocalFoundry.Api.ErrorHandling;
 /// </summary>
 public static class FoundryLocalErrorMapper
 {
+    // Commands match the Foundry Local CLI v0.10.3+ surface; older 'foundry service start' /
+    // 'foundry model run' commands no longer exist.
     private const string InferenceSetupHint =
-        "Run 'foundry model run <alias>' (or 'foundry service start') and check the FoundryLocal:Endpoint/ModelId " +
-        "settings in appsettings.json match what's running. See README.md for setup steps.";
+        "Start the daemon with 'foundry server start --port <port>' and load a model with " +
+        "'foundry model download <alias>' then 'foundry model load <alias>'. The port and alias must match the " +
+        "FoundryLocal:Endpoint and FoundryLocal:ModelId settings in appsettings.json. See README.md for setup steps.";
 
-    private const string CatalogSetupHint = "Install it and run 'foundry service start' first.";
+    private const string CatalogSetupHint =
+        "Install Foundry Local and start it with 'foundry server start --port <port>'. See README.md for setup steps.";
 
     /// <summary>
     /// Tries to map <paramref name="exception"/> to a client-facing error.

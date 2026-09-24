@@ -25,7 +25,7 @@ public static class ServiceCollectionExtensions
         services.Configure<FoundryLocalOptions>(configuration.GetSection("FoundryLocal"));
 
         // Semantic Kernel: orchestration layer. Points at Foundry Local's OpenAI-compatible
-        // endpoint (run `foundry service start` first - see README).
+        // endpoint (run `foundry server start --port 5273` first - see README).
         services.AddSingleton(sp =>
         {
             var options = sp.GetRequiredService<IOptions<FoundryLocalOptions>>().Value;

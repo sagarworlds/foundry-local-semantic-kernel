@@ -48,7 +48,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<Kernel>().GetRequiredService<IChatCompletionService>().AsChatClient());
 
         services.AddSingleton<IAgentService, SemanticKernelAgentService>();
-        services.AddSingleton<FoundryLocalCatalogService>();
+        services.AddSingleton<IModelCatalogService, FoundryLocalCatalogService>();
 
         return services;
     }

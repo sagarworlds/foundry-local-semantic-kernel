@@ -14,11 +14,11 @@ public static class FoundryModelEndpoints
         return app;
     }
 
-    private static async Task<IResult> ListModelsAsync(FoundryLocalCatalogService catalogService)
+    private static async Task<IResult> ListModelsAsync(IModelCatalogService catalogService, CancellationToken ct)
     {
         try
         {
-            var models = await catalogService.ListModelsAsync();
+            var models = await catalogService.ListModelsAsync(ct);
             return Results.Ok(models);
         }
         catch (Exception ex)

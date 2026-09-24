@@ -168,6 +168,10 @@
   async function readProblemDetail(res) {
     try {
       const body = await res.json();
+      // ValidationProblem (400) responses carry per-field messages in `errors` rather than `detail`.
+      if (body.errors) {
+        return Object.values(body.errors).flat().join(' ');
+      }
       return body.detail || body.title || JSON.stringify(body);
     } catch {
       return await res.text().catch(() => res.statusText);

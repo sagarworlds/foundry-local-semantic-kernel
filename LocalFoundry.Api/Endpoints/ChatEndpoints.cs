@@ -1,4 +1,5 @@
 using LocalFoundry.Api.Models;
+using LocalFoundry.Api.Validation;
 using Microsoft.Extensions.AI;
 
 namespace LocalFoundry.Api.Endpoints;
@@ -15,8 +16,11 @@ public static class ChatEndpoints
     /// <returns>The same route builder, for chaining.</returns>
     public static IEndpointRouteBuilder MapChatEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/chat", ChatAsync);
-        app.MapPost("/api/chat/stream", StreamChatAsync);
+        var chat = app.MapGroup("/api/chat")
+            .AddEndpointFilter<ChatRequestValidationFilter>();
+
+        chat.MapPost("/", ChatAsync);
+        chat.MapPost("/stream", StreamChatAsync);
         return app;
     }
 

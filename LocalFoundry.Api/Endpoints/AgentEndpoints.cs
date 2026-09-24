@@ -1,4 +1,5 @@
 using LocalFoundry.Api.Models;
+using LocalFoundry.Api.Validation;
 using LocalFoundry.Api.Services;
 
 namespace LocalFoundry.Api.Endpoints;
@@ -14,7 +15,8 @@ public static class AgentEndpoints
     /// <returns>The same route builder, for chaining.</returns>
     public static IEndpointRouteBuilder MapAgentEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/agent", AskAgentAsync);
+        app.MapPost("/api/agent", AskAgentAsync)
+            .AddEndpointFilter<ChatRequestValidationFilter>();
         return app;
     }
 

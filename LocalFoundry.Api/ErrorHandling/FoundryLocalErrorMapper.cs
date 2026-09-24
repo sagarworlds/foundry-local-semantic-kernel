@@ -36,7 +36,7 @@ public static class FoundryLocalErrorMapper
             FoundryLocalException ex => new FoundryLocalError(
                 StatusCodes.Status503ServiceUnavailable,
                 "Foundry Local unavailable",
-                $"Could not reach Foundry Local: {ex.Message}. {CatalogSetupHint}"),
+                $"Could not reach Foundry Local: {FirstLine(ex.Message)}. {CatalogSetupHint}"),
 
             // Foundry Local answered, but with an error (e.g. the configured ModelId isn't loaded).
             // It's an upstream failure rather than this app's, hence 502 Bad Gateway.
@@ -64,6 +64,14 @@ public static class FoundryLocalErrorMapper
             StatusCodes.Status502BadGateway,
             "Foundry Local returned an error",
             $"The Foundry Local inference endpoint responded with HTTP {upstreamStatus}: {upstreamMessage}. {InferenceSetupHint}");
+
+    // The native SDK embeds the full inner stack trace in FoundryLocalException.Message.
+    // Clients only need the summary line; the complete exception is still logged by the handler.
+    private static string FirstLine(string message)
+    {
+        var end = message.IndexOfAny(['\r', '\n']);
+        return (end < 0 ? message : message[..end]).TrimEnd('"', '.', ' ');
+    }
 
     // SK wraps transport failures in HttpOperationException (with no StatusCode), so walk the
     // inner-exception chain rather than matching only the outermost type.

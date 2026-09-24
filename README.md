@@ -19,7 +19,7 @@ HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
                                                                (localhost:5273/v1)
 ```
 
-`/api/foundry/models` bypasses all of that and talks to Foundry Local's native SDK directly (`Microsoft.AI.Foundry.Local`) to list the on-device model catalog.
+`/api/agent` goes through `IAgentService` (implemented with Semantic Kernel function-calling), and `/api/foundry/models` goes through `IModelCatalogService`, which talks to Foundry Local's native SDK directly (`Microsoft.AI.Foundry.Local`) to list the on-device model catalog. Endpoints depend only on these abstractions, so each backend can be swapped (or faked in tests) without touching endpoint code.
 
 ## Prerequisites
 
@@ -96,14 +96,43 @@ curl -X POST http://localhost:5189/api/agent \
 curl http://localhost:5189/api/foundry/models
 ```
 
+## Validation and error responses
+
+Chat and agent requests are validated before reaching the model: `message` must be present, non-blank and at most 8000 characters, otherwise the API returns `400` with a `ValidationProblem` body listing the errors.
+
+Failures are handled centrally by `FoundryLocalExceptionHandler`, which logs them and returns [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457):
+
+| Status | When |
+|---|---|
+| `400` | Invalid request body (see above) |
+| `502` | Foundry Local responded with an error — typically the configured `ModelId` isn't loaded |
+| `503` | Foundry Local couldn't be reached — daemon not running, or on a different port than `Endpoint` |
+| `500` | Any other, unexpected error (a bug in this app — check the logs) |
+
+For `/api/chat/stream`, errors that occur before the first token get the same status codes; once streaming has started, a failure can only abort the connection.
+
+## Running the tests
+
+```powershell
+dotnet test LocalFoundry.Api.Tests
+```
+
+The tests don't need Foundry Local: they host the app in-memory with `WebApplicationFactory` and replace `IChatClient`, `IAgentService` and `IModelCatalogService` with fakes.
+
 ## Project layout
 
 ```
 LocalFoundry.Api/
-  Program.cs                       DI wiring + minimal API endpoints
-  Options/FoundryLocalOptions.cs   Endpoint/ModelId/ApiKey configuration
-  Plugins/TimePlugin.cs            Sample Semantic Kernel function
-  Models/ChatDtos.cs               Request/response records
-  Services/FoundryLocalCatalogService.cs   Lazy wrapper around FoundryLocalManager
-  wwwroot/index.html               Browser test console for all endpoints
+  Program.cs                                 Host setup: DI, exception handling, static files, endpoints
+  Extensions/ServiceCollectionExtensions.cs  AddLocalFoundryAi(): Semantic Kernel, IChatClient and service registration
+  Endpoints/                                 One class per endpoint group (info, chat, agent, models)
+  ErrorHandling/                             Maps Foundry Local failures to 502/503 ProblemDetails
+  Validation/                                ChatRequest validator + endpoint filter
+  Options/FoundryLocalOptions.cs             Endpoint/ModelId/ApiKey configuration
+  Plugins/TimePlugin.cs                      Sample Semantic Kernel function
+  Models/ChatDtos.cs                         Request/response records
+  Services/IAgentService.cs                  Tool-calling agent abstraction (+ SemanticKernelAgentService)
+  Services/IModelCatalogService.cs           Model catalog abstraction (+ FoundryLocalCatalogService, lazy SDK wrapper)
+  wwwroot/index.html                         Browser test console for all endpoints
+LocalFoundry.Api.Tests/                      xUnit unit and in-memory HTTP tests
 ```

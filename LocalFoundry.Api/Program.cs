@@ -22,3 +22,6 @@ app.UseStaticFiles();
 app.MapLocalFoundryApi();
 
 app.Run();
+
+/// <summary>Entry point; declared partial and public so integration tests can host the app via WebApplicationFactory.</summary>
+public partial class Program;

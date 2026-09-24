@@ -1,0 +1,145 @@
+name: Release
+
+# Pushing a version tag (v1.2.3, or v1.2.3-beta.1 for a prerelease) tests the code, builds
+# Windows x64 and ARM64 installers with Inno Setup, and publishes them as a GitHub Release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  PROJECT: LocalFoundry.Api/LocalFoundry.Api.csproj
+  INNO_VERSION: 6.7.3
+
+jobs:
+  test:
+    name: Test
+    uses: ./.github/workflows/ci.yml
+
+  version:
+    name: Parse version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      numeric: ${{ steps.parse.outputs.numeric }}
+      prerelease: ${{ steps.parse.outputs.prerelease }}
+    steps:
+      - id: parse
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Fail fast on tags that aren't SemVer, rather than producing an installer with a
+          # version Windows can't parse.
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$TAG' is not a version tag like v1.2.3 or v1.2.3-beta.1"
+            exit 1
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "numeric=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$([[ -n "${BASH_REMATCH[2]}" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  installer:
+    name: Installer (win-${{ matrix.arch }})
+    needs: [test, version]
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      NUMERIC: ${{ needs.version.outputs.numeric }}
+      RID: win-${{ matrix.arch }}
+      PUBLISH_DIR: ${{ github.workspace }}\publish\win-${{ matrix.arch }}
+      DIST_DIR: ${{ github.workspace }}\dist
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      # Self-contained so end users don't need the .NET runtime installed.
+      - name: Publish
+        shell: pwsh
+        run: >
+          dotnet publish $env:PROJECT -c Release -r $env:RID --self-contained
+          "-p:Version=$env:VERSION" "-p:FileVersion=$env:NUMERIC" "-p:AssemblyVersion=$env:NUMERIC"
+          -o $env:PUBLISH_DIR
+
+      # Pinned Inno Setup from its NuGet package instead of whatever the runner image or
+      # Chocolatey provides, so installer builds are reproducible (Inno Setup 7 has shipped
+      # and this script targets 6.x).
+      - name: Get Inno Setup
+        shell: pwsh
+        run: |
+          $pkg = Join-Path $env:RUNNER_TEMP 'innosetup.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'innosetup'
+          Invoke-WebRequest -OutFile $pkg `
+            "https://api.nuget.org/v3-flatcontainer/tools.innosetup/$env:INNO_VERSION/tools.innosetup.$env:INNO_VERSION.nupkg"
+          Expand-Archive $pkg $dir
+          $iscc = Join-Path $dir 'tools\ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found in Tools.InnoSetup $env:INNO_VERSION" }
+          "ISCC=$iscc" >> $env:GITHUB_ENV
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & $env:ISCC `
+            "/DAppVersion=$env:VERSION" `
+            "/DAppVersionNumeric=$env:NUMERIC" `
+            "/DAppArch=${{ matrix.arch }}" `
+            "/DPublishDir=$env:PUBLISH_DIR" `
+            "/DOutputDir=$env:DIST_DIR" `
+            installer\LocalFoundry.Api.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed (exit $LASTEXITCODE)" }
+
+      # Portable alternative for users who can't run installers.
+      - name: Create portable zip
+        shell: pwsh
+        run: |
+          Copy-Item installer\Start-LocalFoundry.cmd $env:PUBLISH_DIR
+          # Same exclusions as the installer: debug symbols, import libs, IIS/dev-only config.
+          Get-ChildItem $env:PUBLISH_DIR -Recurse -Include *.pdb, *.lib, web.config, appsettings.Development.json | Remove-Item
+          Compress-Archive -Path "$env:PUBLISH_DIR\*" `
+            -DestinationPath "$env:DIST_DIR\LocalFoundry.Api-$env:VERSION-$env:RID-portable.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-win-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [version, installer]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          flags=(--repo "$GITHUB_REPOSITORY" --title "LocalFoundry.Api $TAG" --generate-notes --verify-tag)
+          if [[ "$PRERELEASE" == "true" ]]; then flags+=(--prerelease); fi
+          gh release create "$TAG" dist/* "${flags[@]}"

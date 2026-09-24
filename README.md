@@ -1,5 +1,7 @@
 # LocalFoundry.Api
 
+[![CI](https://github.com/sagarworlds/foundry-local-semantic-kernel/actions/workflows/ci.yml/badge.svg)](https://github.com/sagarworlds/foundry-local-semantic-kernel/actions/workflows/ci.yml)
+
 A minimal ASP.NET Core Web API that runs a local LLM entirely on-device, combining:
 
 - **[Foundry Local](https://learn.microsoft.com/azure/ai-foundry/foundry-local/)** — the on-device model runtime. It serves an OpenAI-compatible REST endpoint (`http://localhost:5273/v1`) and is also queried directly via its native .NET SDK to list the local model catalog.
@@ -42,6 +44,16 @@ HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
   Run `foundry model list` to see every alias available for your hardware (the app's `GET /api/foundry/models` endpoint also lists these programmatically once the app is running). `foundry server status` shows the daemon's current port/PID/uptime if you need to double check.
 
   > Older Foundry Local docs describe a single `foundry model run <alias>` / `foundry service start` command surface. As of CLI v0.10.3 these have been split into the `foundry server` and `foundry model download`/`load` commands shown above — run `foundry --help` if your version differs.
+
+## Install from a release (Windows)
+
+Each [GitHub Release](https://github.com/sagarworlds/foundry-local-semantic-kernel/releases) provides, for both **x64** and **ARM64**:
+
+- `LocalFoundry.Api-<version>-win-<arch>-setup.exe` — an Inno Setup installer. It installs per-user by default (no admin prompt) into `%LOCALAPPDATA%\Programs\LocalFoundry.Api`, adds Start Menu shortcuts (**LocalFoundry.Api** starts the API and opens the test console; **Edit configuration** opens `appsettings.json`), and warns if Foundry Local isn't installed. Upgrades keep your edited `appsettings.json`.
+- `LocalFoundry.Api-<version>-win-<arch>-portable.zip` — the same files without an installer; unzip and run `Start-LocalFoundry.cmd`.
+- `SHA256SUMS.txt` — checksums for all files.
+
+The builds are self-contained, so the .NET runtime isn't required. Foundry Local still has to be installed and running (see Prerequisites). The launcher serves the app on `http://localhost:5189/`; edit `PORT` at the top of `Start-LocalFoundry.cmd` to change it.
 
 ## Configuration
 
@@ -119,6 +131,26 @@ dotnet test LocalFoundry.Api.Tests
 
 The tests don't need Foundry Local: they host the app in-memory with `WebApplicationFactory` and replace `IChatClient`, `IAgentService` and `IModelCatalogService` with fakes.
 
+## CI and releases
+
+- **CI** (`.github/workflows/ci.yml`) runs on every pull request and push to `main`: restore, build with warnings as errors (including missing XML docs), and run the tests.
+- **Releases** (`.github/workflows/release.yml`) run when a version tag is pushed:
+
+  ```bash
+  git tag v1.0.0          # or v1.0.0-beta.1 for a prerelease
+  git push origin v1.0.0
+  ```
+
+  The workflow runs CI, publishes self-contained `win-x64` and `win-arm64` builds, compiles the installers from `installer/LocalFoundry.Api.iss` with a pinned Inno Setup, and creates a GitHub Release with the installers, portable zips, checksums and generated release notes.
+
+To build an installer locally on Windows (with [Inno Setup 6](https://jrsoftware.org/isinfo.php) installed):
+
+```powershell
+dotnet publish LocalFoundry.Api -c Release -r win-x64 --self-contained -o publish\win-x64
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=0.0.1 /DAppArch=x64 `
+  "/DPublishDir=$PWD\publish\win-x64" "/DOutputDir=$PWD\dist" installer\LocalFoundry.Api.iss
+```
+
 ## Project layout
 
 ```
@@ -135,4 +167,6 @@ LocalFoundry.Api/
   Services/IModelCatalogService.cs           Model catalog abstraction (+ FoundryLocalCatalogService, lazy SDK wrapper)
   wwwroot/index.html                         Browser test console for all endpoints
 LocalFoundry.Api.Tests/                      xUnit unit and in-memory HTTP tests
+installer/                                   Inno Setup script + Start-LocalFoundry.cmd launcher
+.github/workflows/                           CI and tag-triggered release workflows
 ```

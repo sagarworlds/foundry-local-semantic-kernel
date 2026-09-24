@@ -6,6 +6,7 @@ namespace LocalFoundry.Api.Endpoints;
 /// <summary>
 /// Maps the plain chat endpoints, which depend only on the framework-neutral
 /// <see cref="IChatClient"/> (backed by Semantic Kernel + Foundry Local).
+/// Failures are translated to HTTP responses by the global exception handler.
 /// </summary>
 public static class ChatEndpoints
 {
@@ -21,37 +22,33 @@ public static class ChatEndpoints
 
     private static async Task<IResult> ChatAsync(ChatRequest request, IChatClient chatClient, CancellationToken ct)
     {
-        try
-        {
-            var response = await chatClient.GetResponseAsync(
-                [new ChatMessage(ChatRole.User, request.Message)],
-                cancellationToken: ct);
+        var response = await chatClient.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, request.Message)],
+            cancellationToken: ct);
 
-            return Results.Ok(new ChatReply(response.Text));
-        }
-        catch (Exception ex)
-        {
-            return FoundryLocalProblems.Unavailable(ex);
-        }
+        return Results.Ok(new ChatReply(response.Text));
     }
 
     private static async Task StreamChatAsync(ChatRequest request, IChatClient chatClient, HttpResponse httpResponse, CancellationToken ct)
     {
-        try
-        {
-            httpResponse.ContentType = "text/plain";
+        // Pull the first update before committing to a 200 text/plain response, so that an
+        // unreachable Foundry Local still reaches the exception handler as a proper 503.
+        // Once streaming has begun, a failure can only abort the connection.
+        await using var updates = chatClient.GetStreamingResponseAsync(
+            [new ChatMessage(ChatRole.User, request.Message)],
+            cancellationToken: ct).GetAsyncEnumerator(ct);
 
-            await foreach (var update in chatClient.GetStreamingResponseAsync(
-                [new ChatMessage(ChatRole.User, request.Message)],
-                cancellationToken: ct))
-            {
-                await httpResponse.WriteAsync(update.Text, ct);
-                await httpResponse.Body.FlushAsync(ct);
-            }
-        }
-        catch (Exception ex) when (!httpResponse.HasStarted)
+        if (!await updates.MoveNextAsync())
         {
-            await FoundryLocalProblems.Unavailable(ex).ExecuteAsync(httpResponse.HttpContext);
+            return;
         }
+
+        httpResponse.ContentType = "text/plain";
+        do
+        {
+            await httpResponse.WriteAsync(updates.Current.Text, ct);
+            await httpResponse.Body.FlushAsync(ct);
+        }
+        while (await updates.MoveNextAsync());
     }
 }

@@ -3,7 +3,10 @@ using LocalFoundry.Api.Services;
 
 namespace LocalFoundry.Api.Endpoints;
 
-/// <summary>Maps the tool-calling agent endpoint.</summary>
+/// <summary>
+/// Maps the tool-calling agent endpoint.
+/// Failures are translated to HTTP responses by the global exception handler.
+/// </summary>
 public static class AgentEndpoints
 {
     /// <summary>Maps <c>POST /api/agent</c>.</summary>
@@ -17,14 +20,7 @@ public static class AgentEndpoints
 
     private static async Task<IResult> AskAgentAsync(ChatRequest request, IAgentService agent, CancellationToken ct)
     {
-        try
-        {
-            var reply = await agent.AskAsync(request.Message, ct);
-            return Results.Ok(new ChatReply(reply));
-        }
-        catch (Exception ex)
-        {
-            return FoundryLocalProblems.Unavailable(ex);
-        }
+        var reply = await agent.AskAsync(request.Message, ct);
+        return Results.Ok(new ChatReply(reply));
     }
 }

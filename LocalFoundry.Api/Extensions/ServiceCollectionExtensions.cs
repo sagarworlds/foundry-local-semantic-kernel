@@ -18,13 +18,18 @@ public static class ServiceCollectionExtensions
     /// the agent service, the Foundry Local catalog service and the model-call timeout policy.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
-    /// <param name="configuration">Configuration containing the <c>FoundryLocal</c> section.</param>
+    /// <param name="configuration">Configuration containing the <c>FoundryLocal</c> and <c>Agent</c> sections.</param>
     /// <returns>The same service collection, for chaining.</returns>
     public static IServiceCollection AddLocalFoundryAi(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IValidateOptions<FoundryLocalOptions>, FoundryLocalOptionsValidator>();
         services.AddOptions<FoundryLocalOptions>()
             .Bind(configuration.GetSection("FoundryLocal"))
+            .ValidateOnStart();
+
+        services.AddOptions<AgentOptions>()
+            .Bind(configuration.GetSection(AgentOptions.SectionName))
+            .ValidateDataAnnotations()
             .ValidateOnStart();
 
         services.AddRequestTimeouts();

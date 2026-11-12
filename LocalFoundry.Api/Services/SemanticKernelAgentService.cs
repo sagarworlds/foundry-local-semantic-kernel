@@ -1,4 +1,6 @@
+using LocalFoundry.Api.Options;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
@@ -11,15 +13,16 @@ namespace LocalFoundry.Api.Services;
 /// </summary>
 public sealed class SemanticKernelAgentService : IAgentService
 {
-    private const string SystemPrompt = "You are a helpful assistant. Use tools when they help answer the question.";
-
     private readonly IKernelProvider _kernelProvider;
+    private readonly AgentOptions _options;
 
     /// <summary>Creates the service.</summary>
     /// <param name="kernelProvider">Supplies the kernel (chat service plus callable plugins) for the requested model.</param>
-    public SemanticKernelAgentService(IKernelProvider kernelProvider)
+    /// <param name="options">Supplies the system prompt.</param>
+    public SemanticKernelAgentService(IKernelProvider kernelProvider, IOptions<AgentOptions> options)
     {
         _kernelProvider = kernelProvider;
+        _options = options.Value;
     }
 
     /// <inheritdoc />
@@ -27,7 +30,7 @@ public sealed class SemanticKernelAgentService : IAgentService
     {
         var kernel = _kernelProvider.GetKernel(modelId);
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
-        var history = new ChatHistory(SystemPrompt);
+        var history = new ChatHistory(_options.SystemPrompt);
 
         foreach (var message in messages)
         {

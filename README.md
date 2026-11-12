@@ -56,6 +56,9 @@ HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
   "ModelId": "qwen2.5-0.5b",
   "ApiKey": "not-needed",
   "RequestTimeoutSeconds": 120
+},
+"Agent": {
+  "SystemPrompt": "You are a helpful assistant. Use tools when they help answer the question."
 }
 ```
 
@@ -63,7 +66,9 @@ HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
 - `ApiKey` is required by the OpenAI connector's API shape but ignored by Foundry Local.
 - `RequestTimeoutSeconds` is how long to wait for Foundry Local before returning `504`. For `/api/chat/stream` it only covers the wait for the first token.
 
-The settings are validated at startup: the app refuses to start, naming the bad setting, if `Endpoint` isn't an http(s) URL, `ModelId`/`ApiKey` is empty or the timeout isn't positive.
+- `Agent:SystemPrompt` is the instruction placed ahead of every `/api/agent` conversation.
+
+The settings are validated at startup: the app refuses to start, naming the bad setting, if `Endpoint` isn't an http(s) URL, `ModelId`/`ApiKey`/`SystemPrompt` is empty or the timeout isn't positive.
 
 ## Running
 
@@ -186,7 +191,7 @@ LocalFoundry.Api/
   Timeouts/ModelRequestTimeout.cs            504 timeout policy for endpoints that call the model
   ErrorHandling/                             Maps Foundry Local failures to 502/503 ProblemDetails
   Validation/                                ChatRequest validator + endpoint filter
-  Options/FoundryLocalOptions.cs             Endpoint/ModelId/ApiKey configuration
+  Options/                                   FoundryLocal (endpoint, model, timeout) and Agent (system prompt) settings + validation
   Plugins/TimePlugin.cs                      Sample Semantic Kernel function
   Models/ChatDtos.cs                         Request/response records
   Services/IKernelProvider.cs                Builds the Semantic Kernel for a given model (+ FoundryLocalKernelProvider)

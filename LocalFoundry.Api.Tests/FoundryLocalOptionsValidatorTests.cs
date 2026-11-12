@@ -57,4 +57,14 @@ public class FoundryLocalOptionsValidatorTests
         var exception = Assert.Throws<OptionsValidationException>(() => factory.CreateClient());
         Assert.Contains("FoundryLocal:Endpoint", exception.Message);
     }
+
+    [Fact]
+    public void App_WithBlankAgentSystemPrompt_FailsAtStartup()
+    {
+        using var factory = new LocalFoundryApiFactory()
+            .WithWebHostBuilder(builder => builder.UseSetting("Agent:SystemPrompt", " "));
+
+        var exception = Assert.Throws<OptionsValidationException>(() => factory.CreateClient());
+        Assert.Contains("Agent:SystemPrompt", exception.Message);
+    }
 }

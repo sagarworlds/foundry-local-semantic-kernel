@@ -109,6 +109,12 @@
     max-height: 260px;
     overflow-y: auto;
   }
+  .actions { display: flex; gap: 0.5rem; }
+  .card .output { margin: 0 0 0.9rem; }
+  #models-output { margin: 0.9rem 0 0; }
+  .msg + .msg { margin-top: 0.7rem; }
+  .msg .who { display: block; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .msg.error { color: var(--err); }
   .output.err { color: var(--err); border-color: var(--err); }
   .output.empty { color: var(--muted); }
   table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
@@ -132,25 +138,34 @@
   <div class="card">
     <h2>Chat &mdash; Microsoft.Extensions.AI</h2>
     <p class="desc">POST /api/chat &mdash; IChatClient adapted from Semantic Kernel.</p>
+    <div id="chat-output" class="output empty">Conversation will appear here.</div>
     <textarea id="chat-input">What is the capital of France?</textarea>
-    <button id="chat-send">Send</button>
-    <div id="chat-output" class="output empty">Response will appear here.</div>
+    <div class="actions">
+      <button id="chat-send">Send</button>
+      <button id="chat-reset" class="secondary">New conversation</button>
+    </div>
   </div>
 
   <div class="card">
     <h2>Streaming Chat &mdash; Microsoft.Extensions.AI</h2>
     <p class="desc">POST /api/chat/stream &mdash; tokens appended live as they arrive.</p>
+    <div id="stream-output" class="output empty">Conversation will appear here.</div>
     <textarea id="stream-input">Write a short haiku about local AI.</textarea>
-    <button id="stream-send">Send (stream)</button>
-    <div id="stream-output" class="output empty">Response will appear here.</div>
+    <div class="actions">
+      <button id="stream-send">Send (stream)</button>
+      <button id="stream-reset" class="secondary">New conversation</button>
+    </div>
   </div>
 
   <div class="card">
     <h2>Agent &mdash; Semantic Kernel</h2>
     <p class="desc">POST /api/agent &mdash; function-calling enabled (TimePlugin).</p>
+    <div id="agent-output" class="output empty">Conversation will appear here.</div>
     <textarea id="agent-input">What time is it right now?</textarea>
-    <button id="agent-send">Ask agent</button>
-    <div id="agent-output" class="output empty">Response will appear here.</div>
+    <div class="actions">
+      <button id="agent-send">Ask agent</button>
+      <button id="agent-reset" class="secondary">New conversation</button>
+    </div>
   </div>
 
   <div class="card">
@@ -213,91 +228,106 @@
     el.classList.toggle('empty', !text);
   }
 
-  function wireSimpleEndpoint({ buttonId, inputId, outputId, url }) {
-    const button = $(buttonId);
-    const input = $(inputId);
-    const output = $(outputId);
+  // Sends one JSON reply request and returns the reply text.
+  async function requestReply(url, body) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`Error ${res.status}: ${await readProblemDetail(res)}`);
+    return (await res.json()).reply;
+  }
+
+  // Sends one streaming request, calling onText with the reply so far as tokens arrive.
+  async function requestStreamedReply(url, body, onText) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok || !res.body) throw new Error(`Error ${res.status}: ${await readProblemDetail(res)}`);
+
+    let text = '';
+    let failure = null;
+    await readServerSentEvents(res.body, (event, data) => {
+      if (event === 'token') {
+        text += data.text;
+        onText(text);
+      } else if (event === 'error') {
+        failure = data;
+      }
+    });
+
+    if (failure) throw new Error(`Stream failed (${failure.status}): ${failure.detail}`);
+    return text;
+  }
+
+  function appendMessage(output, who, text, isError) {
+    const message = document.createElement('div');
+    message.className = `msg ${isError ? 'error' : who}`;
+
+    const label = document.createElement('span');
+    label.className = 'who';
+    label.textContent = isError ? 'error' : who;
+
+    const body = document.createElement('span');
+    body.textContent = text;
+
+    message.append(label, body);
+    output.classList.remove('empty');
+    output.appendChild(message);
+    output.scrollTop = output.scrollHeight;
+    return body;
+  }
+
+  // Wires one card as a multi-turn conversation. The API is stateless, so the page keeps the
+  // transcript and sends it back as `history` with every new message.
+  function wireConversation({ prefix, send }) {
+    const button = $(`${prefix}-send`);
+    const reset = $(`${prefix}-reset`);
+    const input = $(`${prefix}-input`);
+    const output = $(`${prefix}-output`);
+    let history = [];
+
+    reset.addEventListener('click', () => {
+      history = [];
+      output.replaceChildren();
+      setOutput(output, 'Conversation will appear here.', false);
+      output.classList.add('empty');
+    });
 
     button.addEventListener('click', async () => {
       const message = input.value.trim();
       if (!message) return;
 
-      button.disabled = true;
-      setOutput(output, 'Thinking…', false);
+      if (!history.length) output.replaceChildren();
+      button.disabled = reset.disabled = true;
+      appendMessage(output, 'user', message, false);
+      const replyBody = appendMessage(output, 'assistant', '…', false);
 
       try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message }),
+        const reply = await send({ message, history }, (partial) => {
+          replyBody.textContent = partial;
+          output.scrollTop = output.scrollHeight;
         });
+        replyBody.textContent = reply || '(empty response)';
 
-        if (!res.ok) {
-          setOutput(output, `Error ${res.status}: ${await readProblemDetail(res)}`, true);
-          return;
-        }
-
-        const data = await res.json();
-        setOutput(output, data.reply, false);
+        // Only completed exchanges join the history; a failed turn can simply be retried.
+        history.push({ role: 'user', content: message }, { role: 'assistant', content: reply });
+        input.value = '';
       } catch (err) {
-        setOutput(output, `Request failed: ${err.message}`, true);
+        replyBody.parentElement.remove();
+        appendMessage(output, 'assistant', err.message, true);
       } finally {
-        button.disabled = false;
+        button.disabled = reset.disabled = false;
       }
     });
   }
 
-  wireSimpleEndpoint({ buttonId: 'chat-send', inputId: 'chat-input', outputId: 'chat-output', url: '/api/chat' });
-  wireSimpleEndpoint({ buttonId: 'agent-send', inputId: 'agent-input', outputId: 'agent-output', url: '/api/agent' });
-
-  $('stream-send').addEventListener('click', async () => {
-    const button = $('stream-send');
-    const input = $('stream-input');
-    const output = $('stream-output');
-    const message = input.value.trim();
-    if (!message) return;
-
-    button.disabled = true;
-    setOutput(output, '', false);
-
-    try {
-      const res = await fetch('/api/chat/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
-      });
-
-      if (!res.ok || !res.body) {
-        setOutput(output, `Error ${res.status}: ${await readProblemDetail(res)}`, true);
-        return;
-      }
-
-      let text = '';
-      let failure = null;
-
-      await readServerSentEvents(res.body, (event, data) => {
-        if (event === 'token') {
-          text += data.text;
-          setOutput(output, text, false);
-        } else if (event === 'error') {
-          failure = data;
-        }
-      });
-
-      if (failure) {
-        // Keep whatever arrived before the failure so the user can see where it stopped.
-        const partial = text ? `${text}\n\n` : '';
-        setOutput(output, `${partial}Stream failed (${failure.status}): ${failure.detail}`, true);
-        return;
-      }
-
-      if (!text) setOutput(output, '(empty response)', false);
-    } catch (err) {
-      setOutput(output, `Request failed: ${err.message}`, true);
-    } finally {
-      button.disabled = false;
-    }
-  });
+  wireConversation({ prefix: 'chat', send: (body) => requestReply('/api/chat', body) });
+  wireConversation({ prefix: 'agent', send: (body) => requestReply('/api/agent', body) });
+  wireConversation({ prefix: 'stream', send: (body, onText) => requestStreamedReply('/api/chat/stream', body, onText) });
 
   // Built with DOM nodes and textContent (not innerHTML) so model names are never parsed as markup.
   function buildModelsTable(models) {

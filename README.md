@@ -102,9 +102,30 @@ curl -X POST http://localhost:5189/api/agent \
 curl http://localhost:5189/api/foundry/models
 ```
 
+### Multi-turn conversations
+
+The API is stateless. To ask a follow-up question, send the earlier turns back in `history` (oldest first); the chat, streaming and agent endpoints all accept it:
+
+```bash
+curl -X POST http://localhost:5189/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+        "message": "And of Italy?",
+        "history": [
+          { "role": "user", "content": "What is the capital of France?" },
+          { "role": "assistant", "content": "Paris." }
+        ]
+      }'
+```
+
+The browser test console does this for you: each panel keeps its transcript until you click **New conversation**.
+
 ## Validation and error responses
 
-Chat and agent requests are validated before reaching the model: `message` must be present, non-blank and at most 8000 characters, otherwise the API returns `400` with a `ValidationProblem` body listing the errors.
+Chat and agent requests are validated before reaching the model, otherwise the API returns `400` with a `ValidationProblem` body listing the errors:
+
+- `message` must be present, non-blank and at most 8000 characters.
+- `history` is optional, at most 50 turns. Each turn needs a `role` of `user` or `assistant` (`system` is rejected so callers can't override the agent's instructions) and non-blank `content` of at most 8000 characters.
 
 Failures are handled centrally by `FoundryLocalExceptionHandler`, which logs them and returns [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457):
 

@@ -1,8 +1,17 @@
 namespace LocalFoundry.Api.Models;
 
 /// <summary>Request body for the chat and agent endpoints.</summary>
-/// <param name="Message">The user's message to the model.</param>
-public sealed record ChatRequest(string Message);
+/// <param name="Message">The user's new message to the model.</param>
+/// <param name="History">
+/// Earlier turns of the conversation, oldest first, so the model can answer follow-up questions.
+/// The API is stateless: the client keeps the transcript and sends it back with each request.
+/// </param>
+public sealed record ChatRequest(string Message, IReadOnlyList<ChatTurn>? History = null);
+
+/// <summary>One earlier turn of a conversation.</summary>
+/// <param name="Role">Who said it: <c>user</c> or <c>assistant</c>.</param>
+/// <param name="Content">The text of the turn.</param>
+public sealed record ChatTurn(string Role, string Content);
 
 /// <summary>Response body for the non-streaming chat and agent endpoints.</summary>
 /// <param name="Reply">The model's reply text.</param>

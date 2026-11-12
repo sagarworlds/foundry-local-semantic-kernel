@@ -22,10 +22,13 @@ public sealed class FakeChatClient : IChatClient
 
     public int CallCount { get; private set; }
 
+    public IReadOnlyList<ChatMessage> LastMessages { get; private set; } = [];
+
     public async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         CallCount++;
+        LastMessages = messages.ToList();
         await Task.Delay(Delay, cancellationToken);
         ThrowIfConfigured();
         return new ChatResponse(new ChatMessage(ChatRole.Assistant, string.Concat(Chunks)));
@@ -35,6 +38,7 @@ public sealed class FakeChatClient : IChatClient
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         CallCount++;
+        LastMessages = messages.ToList();
         await Task.Delay(Delay, cancellationToken);
         ThrowIfConfigured();
 

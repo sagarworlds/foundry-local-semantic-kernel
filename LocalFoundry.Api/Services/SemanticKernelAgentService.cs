@@ -1,3 +1,4 @@
+using Microsoft.Extensions.AI;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
@@ -22,11 +23,15 @@ public sealed class SemanticKernelAgentService : IAgentService
     }
 
     /// <inheritdoc />
-    public async Task<string> AskAsync(string message, CancellationToken cancellationToken)
+    public async Task<string> AskAsync(IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
     {
         var chatCompletionService = _kernel.GetRequiredService<IChatCompletionService>();
         var history = new ChatHistory(SystemPrompt);
-        history.AddUserMessage(message);
+
+        foreach (var message in messages)
+        {
+            history.AddMessage(ToAuthorRole(message.Role), message.Text);
+        }
 
         var settings = new OpenAIPromptExecutionSettings
         {
@@ -36,4 +41,8 @@ public sealed class SemanticKernelAgentService : IAgentService
         var result = await chatCompletionService.GetChatMessageContentAsync(history, settings, _kernel, cancellationToken);
         return result.Content ?? string.Empty;
     }
+
+    // Only user and assistant turns are accepted from callers; the system prompt is added above.
+    private static AuthorRole ToAuthorRole(ChatRole role) =>
+        role == ChatRole.Assistant ? AuthorRole.Assistant : AuthorRole.User;
 }

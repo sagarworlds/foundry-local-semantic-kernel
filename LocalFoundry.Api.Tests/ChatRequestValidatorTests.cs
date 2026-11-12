@@ -49,4 +49,52 @@ public class ChatRequestValidatorTests
         var error = Assert.Single(errors[nameof(ChatRequest.Message)]);
         Assert.Contains(ChatRequestValidator.MaxMessageLength.ToString(), error);
     }
+
+    [Fact]
+    public void Validate_ValidHistory_ReturnsNoErrors()
+    {
+        var request = new ChatRequest("And of Italy?", [new ChatTurn("user", "Capital of France?"), new ChatTurn("Assistant", "Paris")]);
+
+        Assert.Empty(ChatRequestValidator.Validate(request));
+    }
+
+    [Theory]
+    [InlineData("system")]
+    [InlineData("tool")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void Validate_HistoryWithUnsupportedRole_ReturnsHistoryError(string? role)
+    {
+        var errors = ChatRequestValidator.Validate(new ChatRequest("hi", [new ChatTurn(role!, "text")]));
+
+        var error = Assert.Single(errors[nameof(ChatRequest.History)]);
+        Assert.Contains("History[0].Role", error);
+    }
+
+    [Fact]
+    public void Validate_HistoryWithBlankOversizedAndNullTurns_ReportsEachByIndex()
+    {
+        var history = new List<ChatTurn>
+        {
+            new("user", " "),
+            new("assistant", new string('a', ChatRequestValidator.MaxMessageLength + 1)),
+            null!,
+        };
+
+        var errors = ChatRequestValidator.Validate(new ChatRequest("hi", history))[nameof(ChatRequest.History)];
+
+        Assert.Equal(3, errors.Length);
+        Assert.Contains("History[0].Content", errors[0]);
+        Assert.Contains("History[1].Content", errors[1]);
+        Assert.Contains("History[2]", errors[2]);
+    }
+
+    [Fact]
+    public void Validate_TooManyHistoryTurns_ReturnsSingleError()
+    {
+        var history = Enumerable.Repeat(new ChatTurn("user", "hi"), ChatRequestValidator.MaxHistoryTurns + 1).ToList();
+
+        var error = Assert.Single(ChatRequestValidator.Validate(new ChatRequest("hi", history))[nameof(ChatRequest.History)]);
+        Assert.Contains(ChatRequestValidator.MaxHistoryTurns.ToString(), error);
+    }
 }

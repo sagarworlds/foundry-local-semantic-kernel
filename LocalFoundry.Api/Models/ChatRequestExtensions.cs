@@ -25,6 +25,13 @@ public static class ChatRequestExtensions
         return messages;
     }
 
+    /// <summary>
+    /// Builds the per-request chat options, selecting the request's model when one was given.
+    /// </summary>
+    /// <param name="request">A request that has already passed validation.</param>
+    /// <returns>Options whose <see cref="ChatOptions.ModelId"/> is <see langword="null"/> to use the configured default model.</returns>
+    public static ChatOptions ToChatOptions(this ChatRequest request) => new() { ModelId = request.Model };
+
     // Validation only admits "user" and "assistant", so anything that isn't the assistant is the user.
     private static ChatRole ToChatRole(string role) =>
         string.Equals(role, ChatTurnRoles.Assistant, StringComparison.OrdinalIgnoreCase) ? ChatRole.Assistant : ChatRole.User;

@@ -41,6 +41,15 @@
     border: 1px solid var(--border);
     background: var(--panel);
   }
+  .model-picker { font-size: 0.8rem; color: var(--muted); display: flex; align-items: center; gap: 0.4rem; }
+  select {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.8rem;
+  }
   .badge.ok { color: var(--ok); border-color: var(--ok); }
   .badge.err { color: var(--err); border-color: var(--err); }
   .badge.pending { color: var(--muted); }
@@ -131,6 +140,11 @@
 <div class="status-bar">
   <span id="api-badge" class="badge pending">API: checking…</span>
   <span id="foundry-badge" class="badge pending">Foundry Local: checking…</span>
+  <label class="model-picker">Model
+    <select id="model-select">
+      <option value="">Configured default</option>
+    </select>
+  </label>
 </div>
 
 <div class="grid">
@@ -263,6 +277,23 @@
     return text;
   }
 
+  // An empty selection omits `model`, so the API falls back to FoundryLocal:ModelId.
+  function selectedModel() {
+    const model = $('model-select').value;
+    return model ? { model } : {};
+  }
+
+  // Offers each catalog alias once (the catalog lists several hardware variants per alias),
+  // keeping the current choice if it is still available.
+  function populateModelPicker(models) {
+    const select = $('model-select');
+    const previous = select.value;
+    const aliases = [...new Set(models.map((m) => m.alias))].sort();
+
+    select.replaceChildren(new Option('Configured default', ''), ...aliases.map((alias) => new Option(alias, alias)));
+    if (aliases.includes(previous)) select.value = previous;
+  }
+
   function appendMessage(output, who, text, isError) {
     const message = document.createElement('div');
     message.className = `msg ${isError ? 'error' : who}`;
@@ -307,7 +338,7 @@
       const replyBody = appendMessage(output, 'assistant', '…', false);
 
       try {
-        const reply = await send({ message, history }, (partial) => {
+        const reply = await send({ message, history, ...selectedModel() }, (partial) => {
           replyBody.textContent = partial;
           output.scrollTop = output.scrollHeight;
         });
@@ -368,6 +399,7 @@
       }
 
       const models = await res.json();
+      populateModelPicker(models);
       badge.textContent = `Foundry Local: ${models.length} models cataloged`;
       badge.className = 'badge ok';
 

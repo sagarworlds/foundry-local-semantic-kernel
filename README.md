@@ -13,7 +13,8 @@ A minimal ASP.NET Core Web API that runs a local LLM entirely on-device, combini
 ```
 HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
                                             │
-                                     .AsChatClient() adapter
+                              ModelRoutingChatClient (picks the kernel for the
+                              requested model, then .AsChatClient() adapter)
                                             │
                               Semantic Kernel IChatCompletionService
                                             │
@@ -118,13 +119,24 @@ curl -X POST http://localhost:5189/api/chat \
       }'
 ```
 
-The browser test console does this for you: each panel keeps its transcript until you click **New conversation**.
+### Choosing a model per request
+
+Add `"model": "<alias>"` to any chat, streaming or agent request to use a model other than the configured `ModelId` for that request. The alias must be one that `GET /api/foundry/models` lists and that is loaded (`foundry model load <alias>`); if it isn't, Foundry Local's error comes back as a `502`.
+
+```bash
+curl -X POST http://localhost:5189/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"What is the capital of France?","model":"phi-4-mini"}'
+```
+
+The browser test console has a **Model** dropdown filled from the catalog, and keeps conversations for you: each panel keeps its transcript until you click **New conversation**.
 
 ## Validation and error responses
 
 Chat and agent requests are validated before reaching the model, otherwise the API returns `400` with a `ValidationProblem` body listing the errors:
 
 - `message` must be present, non-blank and at most 8000 characters.
+- `model` is optional; if given it must be 1-100 characters of letters, digits, `.`, `-`, `_` or `:`.
 - `history` is optional, at most 50 turns. Each turn needs a `role` of `user` or `assistant` (`system` is rejected so callers can't override the agent's instructions) and non-blank `content` of at most 8000 characters.
 
 Failures are handled centrally by `FoundryLocalExceptionHandler`, which logs them and returns [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457):
@@ -173,6 +185,8 @@ LocalFoundry.Api/
   Options/FoundryLocalOptions.cs             Endpoint/ModelId/ApiKey configuration
   Plugins/TimePlugin.cs                      Sample Semantic Kernel function
   Models/ChatDtos.cs                         Request/response records
+  Services/IKernelProvider.cs                Builds the Semantic Kernel for a given model (+ FoundryLocalKernelProvider)
+  Services/ModelRoutingChatClient.cs         IChatClient that routes each call to the requested model's kernel
   Services/IAgentService.cs                  Tool-calling agent abstraction (+ SemanticKernelAgentService)
   Services/IModelCatalogService.cs           Model catalog abstraction (+ FoundryLocalCatalogService, lazy SDK wrapper)
   wwwroot/index.html                         Browser test console for all endpoints

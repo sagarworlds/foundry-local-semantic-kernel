@@ -24,7 +24,7 @@ public static class AgentEndpoints
 
     private static async Task<IResult> AskAgentAsync(ChatRequest request, IAgentService agent, CancellationToken ct)
     {
-        var reply = await agent.AskAsync(request.ToChatMessages(), ct);
+        var reply = await agent.AskAsync(request.ToChatMessages(), request.Model, ct);
         return Results.Ok(new ChatReply(reply));
     }
 }

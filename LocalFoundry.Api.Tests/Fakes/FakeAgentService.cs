@@ -12,9 +12,12 @@ public sealed class FakeAgentService : IAgentService
 
     public IReadOnlyList<ChatMessage> LastMessages { get; private set; } = [];
 
-    public Task<string> AskAsync(IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+    public string? LastModelId { get; private set; }
+
+    public Task<string> AskAsync(IEnumerable<ChatMessage> messages, string? modelId, CancellationToken cancellationToken)
     {
         LastMessages = messages.ToList();
+        LastModelId = modelId;
         return ExceptionToThrow is null ? Task.FromResult(Reply) : Task.FromException<string>(ExceptionToThrow);
     }
 }

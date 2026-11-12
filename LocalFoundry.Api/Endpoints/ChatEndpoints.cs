@@ -34,9 +34,7 @@ public static class ChatEndpoints
 
     private static async Task<IResult> ChatAsync(ChatRequest request, IChatClient chatClient, CancellationToken ct)
     {
-        var response = await chatClient.GetResponseAsync(
-            request.ToChatMessages(),
-            cancellationToken: ct);
+        var response = await chatClient.GetResponseAsync(request.ToChatMessages(), request.ToChatOptions(), ct);
 
         return Results.Ok(new ChatReply(response.Text));
     }
@@ -46,9 +44,9 @@ public static class ChatEndpoints
     {
         // Pull the first update before committing to a 200 event stream, so that an
         // unreachable Foundry Local still reaches the exception handler as a proper 503.
-        await using var updates = chatClient.GetStreamingResponseAsync(
-            request.ToChatMessages(),
-            cancellationToken: ct).GetAsyncEnumerator(ct);
+        await using var updates = chatClient
+            .GetStreamingResponseAsync(request.ToChatMessages(), request.ToChatOptions(), ct)
+            .GetAsyncEnumerator(ct);
 
         var hasUpdate = await updates.MoveNextAsync();
 

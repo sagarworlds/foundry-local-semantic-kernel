@@ -75,6 +75,32 @@ public sealed class ApiEndpointTests : IDisposable
             _factory.Agent.LastMessages.Select(m => (m.Role, m.Text)));
     }
 
+    [Theory]
+    [InlineData("/api/chat")]
+    [InlineData("/api/chat/stream")]
+    public async Task ChatEndpoints_WithModel_SelectThatModel(string path)
+    {
+        await _client.PostAsJsonAsync(path, new ChatRequest("hi", Model: "phi-4-mini"));
+
+        Assert.Equal("phi-4-mini", _factory.ChatClient.LastOptions!.ModelId);
+    }
+
+    [Fact]
+    public async Task Chat_WithoutModel_LeavesModelUnsetSoTheConfiguredDefaultApplies()
+    {
+        await _client.PostAsJsonAsync("/api/chat", new ChatRequest("hi"));
+
+        Assert.Null(_factory.ChatClient.LastOptions!.ModelId);
+    }
+
+    [Fact]
+    public async Task Agent_WithModel_SelectsThatModel()
+    {
+        await _client.PostAsJsonAsync("/api/agent", new ChatRequest("hi", Model: "phi-4-mini"));
+
+        Assert.Equal("phi-4-mini", _factory.Agent.LastModelId);
+    }
+
     [Fact]
     public async Task Chat_HistoryWithSystemRole_Returns400WithoutCallingModel()
     {

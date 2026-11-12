@@ -20,6 +20,9 @@ public static class ChatRequestValidator
     /// </summary>
     public const int MaxHistoryTurns = 50;
 
+    /// <summary>Upper bound on the length of a model alias.</summary>
+    public const int MaxModelLength = 100;
+
     /// <summary>
     /// Validates <paramref name="request"/>.
     /// </summary>
@@ -49,8 +52,22 @@ public static class ChatRequestValidator
             errors[nameof(ChatRequest.History)] = [.. historyErrors];
         }
 
+        // null means "use the configured default"; an explicit value must look like a model alias.
+        if (request?.Model is { } model && !IsValidModel(model))
+        {
+            errors[nameof(ChatRequest.Model)] =
+                [$"Model must be 1-{MaxModelLength} characters of letters, digits, '.', '-', '_' or ':' (for example 'qwen2.5-0.5b')."];
+        }
+
         return errors;
     }
+
+    // Foundry Local aliases and variant ids only use these characters (e.g.
+    // "qwen2.5-0.5b", "Phi-4-mini-instruct-generic-cpu:4"); rejecting anything else keeps
+    // arbitrary text out of the upstream request.
+    private static bool IsValidModel(string model) =>
+        model.Length is > 0 and <= MaxModelLength
+        && model.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_' or ':');
 
     private static List<string> ValidateHistory(IReadOnlyList<ChatTurn>? history)
     {

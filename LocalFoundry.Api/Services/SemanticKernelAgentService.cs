@@ -6,26 +6,27 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 namespace LocalFoundry.Api.Services;
 
 /// <summary>
-/// <see cref="IAgentService"/> backed by a Semantic Kernel <see cref="Kernel"/>, whose registered
-/// plugins are exposed to the model as callable tools.
+/// <see cref="IAgentService"/> backed by Semantic Kernel, whose registered plugins are exposed
+/// to the model as callable tools.
 /// </summary>
 public sealed class SemanticKernelAgentService : IAgentService
 {
     private const string SystemPrompt = "You are a helpful assistant. Use tools when they help answer the question.";
 
-    private readonly Kernel _kernel;
+    private readonly IKernelProvider _kernelProvider;
 
     /// <summary>Creates the service.</summary>
-    /// <param name="kernel">Kernel providing the chat service and the plugins the model may call.</param>
-    public SemanticKernelAgentService(Kernel kernel)
+    /// <param name="kernelProvider">Supplies the kernel (chat service plus callable plugins) for the requested model.</param>
+    public SemanticKernelAgentService(IKernelProvider kernelProvider)
     {
-        _kernel = kernel;
+        _kernelProvider = kernelProvider;
     }
 
     /// <inheritdoc />
-    public async Task<string> AskAsync(IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
+    public async Task<string> AskAsync(IEnumerable<ChatMessage> messages, string? modelId, CancellationToken cancellationToken)
     {
-        var chatCompletionService = _kernel.GetRequiredService<IChatCompletionService>();
+        var kernel = _kernelProvider.GetKernel(modelId);
+        var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
         var history = new ChatHistory(SystemPrompt);
 
         foreach (var message in messages)
@@ -38,7 +39,7 @@ public sealed class SemanticKernelAgentService : IAgentService
             FunctionChoiceBehavior = FunctionChoiceBehavior.Auto(),
         };
 
-        var result = await chatCompletionService.GetChatMessageContentAsync(history, settings, _kernel, cancellationToken);
+        var result = await chatCompletionService.GetChatMessageContentAsync(history, settings, kernel, cancellationToken);
         return result.Content ?? string.Empty;
     }
 

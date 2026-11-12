@@ -6,7 +6,12 @@ namespace LocalFoundry.Api.Models;
 /// Earlier turns of the conversation, oldest first, so the model can answer follow-up questions.
 /// The API is stateless: the client keeps the transcript and sends it back with each request.
 /// </param>
-public sealed record ChatRequest(string Message, IReadOnlyList<ChatTurn>? History = null);
+/// <param name="Model">
+/// Alias of the Foundry Local model to use for this request (one of the aliases returned by
+/// <c>GET /api/foundry/models</c>, loaded with <c>foundry model load</c>). Omit to use the
+/// configured <c>FoundryLocal:ModelId</c>.
+/// </param>
+public sealed record ChatRequest(string Message, IReadOnlyList<ChatTurn>? History = null, string? Model = null);
 
 /// <summary>One earlier turn of a conversation.</summary>
 /// <param name="Role">Who said it: <c>user</c> or <c>assistant</c>.</param>

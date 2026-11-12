@@ -97,4 +97,33 @@ public class ChatRequestValidatorTests
         var error = Assert.Single(ChatRequestValidator.Validate(new ChatRequest("hi", history))[nameof(ChatRequest.History)]);
         Assert.Contains(ChatRequestValidator.MaxHistoryTurns.ToString(), error);
     }
+
+    [Theory]
+    [InlineData("qwen2.5-0.5b")]
+    [InlineData("Phi-4-mini-instruct-generic-cpu:4")]
+    public void Validate_ValidModel_ReturnsNoErrors(string model)
+    {
+        Assert.Empty(ChatRequestValidator.Validate(new ChatRequest("hi", Model: model)));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("phi 4")]
+    [InlineData("../models/other")]
+    [InlineData("model\nname")]
+    public void Validate_MalformedModel_ReturnsModelError(string model)
+    {
+        var errors = ChatRequestValidator.Validate(new ChatRequest("hi", Model: model));
+
+        Assert.Contains(nameof(ChatRequest.Model), errors.Keys);
+    }
+
+    [Fact]
+    public void Validate_ModelOverMaxLength_ReturnsModelError()
+    {
+        var model = new string('a', ChatRequestValidator.MaxModelLength + 1);
+
+        Assert.Contains(nameof(ChatRequest.Model), ChatRequestValidator.Validate(new ChatRequest("hi", Model: model)).Keys);
+    }
 }

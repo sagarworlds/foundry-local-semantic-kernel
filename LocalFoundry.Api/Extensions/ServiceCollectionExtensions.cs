@@ -1,12 +1,9 @@
 using LocalFoundry.Api.Options;
-using LocalFoundry.Api.Plugins;
 using LocalFoundry.Api.Services;
 using LocalFoundry.Api.Timeouts;
 using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
 
 namespace LocalFoundry.Api.Extensions;
 
@@ -16,7 +13,7 @@ namespace LocalFoundry.Api.Extensions;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers the Semantic Kernel <see cref="Kernel"/>, the <see cref="IChatClient"/> adapter over it,
+    /// Registers the Semantic Kernel provider, the <see cref="IChatClient"/> adapter over it,
     /// the agent service, the Foundry Local catalog service and the model-call timeout policy.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
@@ -32,28 +29,17 @@ public static class ServiceCollectionExtensions
         services.AddRequestTimeouts();
         services.AddSingleton<IConfigureOptions<RequestTimeoutOptions>, ModelRequestTimeout>();
 
-        // Semantic Kernel: orchestration layer. Points at Foundry Local's OpenAI-compatible
+        // One pooled client for every call to Foundry Local. Its own timeout is switched off
+        // because the request-timeout policy above already bounds how long a call may take;
+        // HttpClient's default 100 seconds would otherwise cut in first.
+        services.AddHttpClient(FoundryLocalKernelProvider.HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
+
+        // Semantic Kernel: orchestration layer, pointed at Foundry Local's OpenAI-compatible
         // endpoint (run `foundry server start --port 5273` first - see README).
-        services.AddSingleton(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<FoundryLocalOptions>>().Value;
+        services.AddSingleton<IKernelProvider, FoundryLocalKernelProvider>();
 
-            var kernelBuilder = Kernel.CreateBuilder();
-#pragma warning disable SKEXP0010 // Custom OpenAI-compatible endpoints are experimental in SK.
-            kernelBuilder.AddOpenAIChatCompletion(
-                modelId: options.ModelId,
-                endpoint: new Uri(options.Endpoint),
-                apiKey: options.ApiKey);
-#pragma warning restore SKEXP0010
-            kernelBuilder.Plugins.AddFromType<TimePlugin>();
-
-            return kernelBuilder.Build();
-        });
-
-        // Microsoft.Extensions.AI: adapt the Semantic Kernel chat service into the M.E.AI
-        // abstraction so app/endpoint code can depend on the framework-neutral IChatClient.
-        services.AddSingleton<IChatClient>(sp =>
-            sp.GetRequiredService<Kernel>().GetRequiredService<IChatCompletionService>().AsChatClient());
+        // Microsoft.Extensions.AI: the framework-neutral abstraction endpoint code depends on.
+        services.AddSingleton<IChatClient, ModelRoutingChatClient>();
 
         services.AddSingleton<IAgentService, SemanticKernelAgentService>();
         services.AddSingleton<IModelCatalogService, FoundryLocalCatalogService>();

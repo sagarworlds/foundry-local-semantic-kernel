@@ -11,7 +11,8 @@ public interface IAgentService
     /// Sends the conversation to the model with automatic tool invocation enabled.
     /// </summary>
     /// <param name="messages">The conversation so far, oldest first, ending with the user's new message.</param>
+    /// <param name="modelId">Model to use for this request, or <see langword="null"/> for the configured default.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The model's final text reply, or an empty string if it produced none.</returns>
-    Task<string> AskAsync(IEnumerable<ChatMessage> messages, CancellationToken cancellationToken);
+    Task<string> AskAsync(IEnumerable<ChatMessage> messages, string? modelId, CancellationToken cancellationToken);
 }

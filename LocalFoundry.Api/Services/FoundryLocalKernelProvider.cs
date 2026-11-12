@@ -20,15 +20,19 @@ public sealed class FoundryLocalKernelProvider : IKernelProvider
 
     private readonly FoundryLocalOptions _options;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly TimeProvider _timeProvider;
     private readonly Lazy<Kernel> _defaultKernel;
 
     /// <summary>Creates the provider.</summary>
     /// <param name="options">Endpoint, default model and API key.</param>
     /// <param name="httpClientFactory">Supplies the pooled <see cref="HttpClient"/> the connector sends requests with.</param>
-    public FoundryLocalKernelProvider(IOptions<FoundryLocalOptions> options, IHttpClientFactory httpClientFactory)
+    /// <param name="timeProvider">Clock handed to the <see cref="TimePlugin"/>.</param>
+    public FoundryLocalKernelProvider(
+        IOptions<FoundryLocalOptions> options, IHttpClientFactory httpClientFactory, TimeProvider timeProvider)
     {
         _options = options.Value;
         _httpClientFactory = httpClientFactory;
+        _timeProvider = timeProvider;
         _defaultKernel = new Lazy<Kernel>(() => BuildKernel(_options.ModelId));
     }
 
@@ -51,7 +55,7 @@ public sealed class FoundryLocalKernelProvider : IKernelProvider
             apiKey: _options.ApiKey,
             httpClient: _httpClientFactory.CreateClient(HttpClientName));
 #pragma warning restore SKEXP0010
-        kernelBuilder.Plugins.AddFromType<TimePlugin>();
+        kernelBuilder.Plugins.AddFromObject(new TimePlugin(_timeProvider));
 
         return kernelBuilder.Build();
     }

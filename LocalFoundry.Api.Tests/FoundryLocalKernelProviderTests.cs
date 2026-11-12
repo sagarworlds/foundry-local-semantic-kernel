@@ -17,7 +17,8 @@ public sealed class FoundryLocalKernelProviderTests : IDisposable
     {
         _provider = new FoundryLocalKernelProvider(
             Microsoft.Extensions.Options.Options.Create(new FoundryLocalOptions { ModelId = "default-model" }),
-            _services.GetRequiredService<IHttpClientFactory>());
+            _services.GetRequiredService<IHttpClientFactory>(),
+            TimeProvider.System);
     }
 
     public void Dispose() => _services.Dispose();

@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
 
         // Semantic Kernel: orchestration layer, pointed at Foundry Local's OpenAI-compatible
         // endpoint (run `foundry server start --port 5273` first - see README).
+        services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IKernelProvider, FoundryLocalKernelProvider>();
 
         // Microsoft.Extensions.AI: the framework-neutral abstraction endpoint code depends on.

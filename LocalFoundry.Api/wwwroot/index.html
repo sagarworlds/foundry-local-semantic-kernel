@@ -262,6 +262,29 @@
     }
   });
 
+  // Built with DOM nodes and textContent (not innerHTML) so model names are never parsed as markup.
+  function buildModelsTable(models) {
+    const table = document.createElement('table');
+    const headerRow = table.createTHead().insertRow();
+    for (const title of ['Alias', 'Id']) {
+      const th = document.createElement('th');
+      th.textContent = title;
+      headerRow.appendChild(th);
+    }
+
+    const body = table.createTBody();
+    for (const model of models) {
+      const row = body.insertRow();
+      row.insertCell().textContent = model.alias;
+      row.insertCell().textContent = model.id;
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'models-wrap';
+    wrap.appendChild(table);
+    return wrap;
+  }
+
   async function loadModels() {
     const output = $('models-output');
     const badge = $('foundry-badge');
@@ -286,11 +309,8 @@
         return;
       }
 
-      const rows = models
-        .map((m) => `<tr><td>${m.alias}</td><td>${m.id}</td></tr>`)
-        .join('');
       output.classList.remove('empty', 'err');
-      output.innerHTML = `<div class="models-wrap"><table><thead><tr><th>Alias</th><th>Id</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      output.replaceChildren(buildModelsTable(models));
     } catch (err) {
       setOutput(output, `Request failed: ${err.message}`, true);
       badge.textContent = 'Foundry Local: unreachable';

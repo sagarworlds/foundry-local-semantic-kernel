@@ -202,6 +202,7 @@ LocalFoundry.Api/
   Services/IModelCatalogService.cs           Model catalog abstraction (+ FoundryLocalCatalogService, lazy SDK wrapper)
   wwwroot/index.html                         Browser test console for all endpoints
 LocalFoundry.Api.Tests/                      xUnit unit and in-memory HTTP tests
+Directory.Packages.props                     NuGet package versions for both projects (central package management)
 .github/workflows/ci.yml                     Build and test on pull requests and pushes to main
 .github/dependabot.yml                       Weekly NuGet and GitHub Actions update PRs
 ```

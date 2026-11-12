@@ -1,0 +1,30 @@
+version: 2
+
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # These libraries are released together and depend on each other's versions, so
+      # updating them one at a time tends to produce PRs that don't build.
+      ai-stack:
+        patterns:
+          - Microsoft.SemanticKernel*
+          - Microsoft.Extensions.AI*
+          - Microsoft.AI.Foundry.Local*
+      test-tooling:
+        patterns:
+          - xunit*
+          - Microsoft.NET.Test.Sdk
+    ignore:
+      # The project targets .NET 9, so ASP.NET Core packages must stay on 9.x until the
+      # target framework itself is upgraded.
+      - dependency-name: Microsoft.AspNetCore.*
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

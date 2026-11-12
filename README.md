@@ -180,6 +180,8 @@ The tests don't need Foundry Local: they host the app in-memory with `WebApplica
 
 `.github/workflows/ci.yml` runs on every pull request and push to `main`: restore, build with warnings as errors (including missing XML docs), and run the tests.
 
+Dependabot (`.github/dependabot.yml`) opens weekly pull requests for NuGet and GitHub Actions updates, which CI then checks. The Semantic Kernel, Microsoft.Extensions.AI and Foundry Local packages are updated together as one group.
+
 ## Project layout
 
 ```
@@ -201,4 +203,5 @@ LocalFoundry.Api/
   wwwroot/index.html                         Browser test console for all endpoints
 LocalFoundry.Api.Tests/                      xUnit unit and in-memory HTTP tests
 .github/workflows/ci.yml                     Build and test on pull requests and pushes to main
+.github/dependabot.yml                       Weekly NuGet and GitHub Actions update PRs
 ```

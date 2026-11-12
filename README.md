@@ -84,6 +84,7 @@ Open **http://localhost:5189/** — it serves a plain HTML+JS test console (`www
 |---|---|---|
 | GET | `/` | HTML test console (`wwwroot/index.html`) |
 | GET | `/api/info` | Service info (JSON) |
+| GET | `/health` | `200` if Foundry Local's endpoint is reachable, `503` if not, with a JSON reason |
 | POST | `/api/chat` | Plain chat via `IChatClient` (Microsoft.Extensions.AI) |
 | POST | `/api/chat/stream` | Streaming variant of the above, as Server-Sent Events |
 | POST | `/api/agent` | Semantic Kernel chat with function-calling enabled (`TimePlugin`) |
@@ -179,7 +180,9 @@ The tests don't need Foundry Local: they host the app in-memory with `WebApplica
 LocalFoundry.Api/
   Program.cs                                 Host setup: DI, exception handling, static files, endpoints
   Extensions/ServiceCollectionExtensions.cs  AddLocalFoundryAi(): Semantic Kernel, IChatClient and service registration
-  Endpoints/                                 One class per endpoint group (info, chat, agent, models)
+  Endpoints/                                 One class per endpoint group (info, health, chat, agent, models)
+  Health/FoundryLocalHealthCheck.cs          Probes Foundry Local's /models endpoint for GET /health
+  Timeouts/ModelRequestTimeout.cs            504 timeout policy for endpoints that call the model
   ErrorHandling/                             Maps Foundry Local failures to 502/503 ProblemDetails
   Validation/                                ChatRequest validator + endpoint filter
   Options/FoundryLocalOptions.cs             Endpoint/ModelId/ApiKey configuration

@@ -14,6 +14,7 @@ public static class InfoEndpoints
             description = "Sample .NET API combining Microsoft.Extensions.AI, Semantic Kernel, and Foundry Local.",
             endpoints = new[]
             {
+                "GET /health",
                 "POST /api/chat",
                 "POST /api/chat/stream",
                 "POST /api/agent",

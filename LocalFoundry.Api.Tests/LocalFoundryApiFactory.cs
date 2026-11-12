@@ -21,6 +21,9 @@ public sealed class LocalFoundryApiFactory : WebApplicationFactory<Program>
 
     public FakeModelCatalogService Catalog { get; } = new();
 
+    /// <summary>Answers the HTTP calls the app makes to Foundry Local directly (the health probe).</summary>
+    public StubHttpMessageHandler FoundryLocalHttp { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.ConfigureServices(services =>
@@ -32,6 +35,9 @@ public sealed class LocalFoundryApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IChatClient>(ChatClient);
             services.AddSingleton<IAgentService>(Agent);
             services.AddSingleton<IModelCatalogService>(Catalog);
+
+            services.AddHttpClient(FoundryLocalKernelProvider.HttpClientName)
+                .ConfigurePrimaryHttpMessageHandler(() => FoundryLocalHttp);
         });
     }
 }

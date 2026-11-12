@@ -38,6 +38,41 @@ public sealed class ApiEndpointTests : IDisposable
     }
 
     [Fact]
+    public async Task Health_FoundryLocalReachable_Returns200AndProbesTheModelsEndpoint()
+    {
+        var response = await _client.GetAsync("/health");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var report = await response.Content.ReadFromJsonAsync<HealthReportDto>();
+        Assert.Equal("Healthy", report!.Status);
+        Assert.Equal("foundry-local", Assert.Single(report.Checks).Name);
+        Assert.Equal(new Uri("http://localhost:5273/v1/models"), Assert.Single(_factory.FoundryLocalHttp.RequestedUris));
+    }
+
+    [Fact]
+    public async Task Health_FoundryLocalUnreachable_Returns503WithReason()
+    {
+        _factory.FoundryLocalHttp.ExceptionToThrow = new HttpRequestException("Connection refused");
+
+        var response = await _client.GetAsync("/health");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        var report = await response.Content.ReadFromJsonAsync<HealthReportDto>();
+        Assert.Equal("Unhealthy", report!.Status);
+        Assert.Contains("Connection refused", Assert.Single(report.Checks).Description);
+    }
+
+    [Fact]
+    public async Task Health_FoundryLocalReturnsError_Returns503()
+    {
+        _factory.FoundryLocalHttp.StatusCode = HttpStatusCode.InternalServerError;
+
+        var response = await _client.GetAsync("/health");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Chat_ValidMessage_ReturnsModelReply()
     {
         var response = await _client.PostAsJsonAsync("/api/chat", new ChatRequest("Capital of France?"));
@@ -262,4 +297,8 @@ public sealed class ApiEndpointTests : IDisposable
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
         Assert.DoesNotContain("Frame()", problem!.Detail);
     }
+
+    private sealed record HealthReportDto(string Status, List<HealthCheckDto> Checks);
+
+    private sealed record HealthCheckDto(string Name, string Status, string? Description);
 }

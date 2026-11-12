@@ -385,23 +385,17 @@
 
   async function loadModels() {
     const output = $('models-output');
-    const badge = $('foundry-badge');
     setOutput(output, 'Loading…', false);
 
     try {
       const res = await fetch('/api/foundry/models');
       if (!res.ok) {
-        const detail = await readProblemDetail(res);
-        setOutput(output, `Error ${res.status}: ${detail}`, true);
-        badge.textContent = 'Foundry Local: unreachable';
-        badge.className = 'badge err';
+        setOutput(output, `Error ${res.status}: ${await readProblemDetail(res)}`, true);
         return;
       }
 
       const models = await res.json();
       populateModelPicker(models);
-      badge.textContent = `Foundry Local: ${models.length} models cataloged`;
-      badge.className = 'badge ok';
 
       if (!models.length) {
         setOutput(output, '(no models found)', false);
@@ -412,8 +406,6 @@
       output.replaceChildren(buildModelsTable(models));
     } catch (err) {
       setOutput(output, `Request failed: ${err.message}`, true);
-      badge.textContent = 'Foundry Local: unreachable';
-      badge.className = 'badge err';
     }
   }
 
@@ -436,7 +428,24 @@
     }
   }
 
+  // GET /health answers 200 or 503 with the same JSON shape, so both are read the same way.
+  async function checkFoundryLocal() {
+    const badge = $('foundry-badge');
+    try {
+      const report = await (await fetch('/health')).json();
+      const healthy = report.status === 'Healthy';
+      badge.textContent = `Foundry Local: ${healthy ? 'reachable' : 'unreachable'}`;
+      badge.title = report.checks.map((check) => check.description).join(' ');
+      badge.className = `badge ${healthy ? 'ok' : 'err'}`;
+    } catch (err) {
+      badge.textContent = 'Foundry Local: unknown';
+      badge.title = err.message;
+      badge.className = 'badge err';
+    }
+  }
+
   checkApi();
+  checkFoundryLocal();
   loadModels();
 </script>
 

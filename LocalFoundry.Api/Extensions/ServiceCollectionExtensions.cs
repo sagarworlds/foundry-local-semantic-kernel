@@ -1,3 +1,4 @@
+using LocalFoundry.Api.Health;
 using LocalFoundry.Api.Options;
 using LocalFoundry.Api.Services;
 using LocalFoundry.Api.Timeouts;
@@ -33,6 +34,8 @@ public static class ServiceCollectionExtensions
         // because the request-timeout policy above already bounds how long a call may take;
         // HttpClient's default 100 seconds would otherwise cut in first.
         services.AddHttpClient(FoundryLocalKernelProvider.HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
+
+        services.AddHealthChecks().AddCheck<FoundryLocalHealthCheck>(FoundryLocalHealthCheck.Name);
 
         // Semantic Kernel: orchestration layer, pointed at Foundry Local's OpenAI-compatible
         // endpoint (run `foundry server start --port 5273` first - see README).

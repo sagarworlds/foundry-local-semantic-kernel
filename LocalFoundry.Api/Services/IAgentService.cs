@@ -1,15 +1,18 @@
+using Microsoft.Extensions.AI;
+
 namespace LocalFoundry.Api.Services;
 
 /// <summary>
-/// Answers a user message with a model that may call registered tools (function calling).
+/// Answers a conversation with a model that may call registered tools (function calling).
 /// </summary>
 public interface IAgentService
 {
     /// <summary>
-    /// Sends <paramref name="message"/> to the model with automatic tool invocation enabled.
+    /// Sends the conversation to the model with automatic tool invocation enabled.
     /// </summary>
-    /// <param name="message">The user's message.</param>
+    /// <param name="messages">The conversation so far, oldest first, ending with the user's new message.</param>
+    /// <param name="modelId">Model to use for this request, or <see langword="null"/> for the configured default.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The model's final text reply, or an empty string if it produced none.</returns>
-    Task<string> AskAsync(string message, CancellationToken cancellationToken);
+    Task<string> AskAsync(IEnumerable<ChatMessage> messages, string? modelId, CancellationToken cancellationToken);
 }

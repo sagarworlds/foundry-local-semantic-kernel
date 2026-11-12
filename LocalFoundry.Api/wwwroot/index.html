@@ -27,6 +27,7 @@
   }
   h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
   .subtitle { color: var(--muted); margin: 0 0 1.5rem; font-size: 0.9rem; }
+  a { color: var(--accent); }
   .status-bar {
     display: flex;
     flex-wrap: wrap;
@@ -40,6 +41,15 @@
     font-size: 0.8rem;
     border: 1px solid var(--border);
     background: var(--panel);
+  }
+  .model-picker { font-size: 0.8rem; color: var(--muted); display: flex; align-items: center; gap: 0.4rem; }
+  select {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.8rem;
   }
   .badge.ok { color: var(--ok); border-color: var(--ok); }
   .badge.err { color: var(--err); border-color: var(--err); }
@@ -109,6 +119,12 @@
     max-height: 260px;
     overflow-y: auto;
   }
+  .actions { display: flex; gap: 0.5rem; }
+  .card .output { margin: 0 0 0.9rem; }
+  #models-output { margin: 0.9rem 0 0; }
+  .msg + .msg { margin-top: 0.7rem; }
+  .msg .who { display: block; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .msg.error { color: var(--err); }
   .output.err { color: var(--err); border-color: var(--err); }
   .output.empty { color: var(--muted); }
   table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
@@ -120,11 +136,16 @@
 <body>
 
 <h1>LocalFoundry.Api Test Console</h1>
-<p class="subtitle">Plain HTML + JS page hitting the API's own endpoints (same origin, no CORS setup needed).</p>
+<p class="subtitle">Plain HTML + JS page hitting the API's own endpoints (same origin, no CORS setup needed). <a href="/openapi/v1.json">OpenAPI description</a></p>
 
 <div class="status-bar">
   <span id="api-badge" class="badge pending">API: checking…</span>
   <span id="foundry-badge" class="badge pending">Foundry Local: checking…</span>
+  <label class="model-picker">Model
+    <select id="model-select">
+      <option value="">Configured default</option>
+    </select>
+  </label>
 </div>
 
 <div class="grid">
@@ -132,25 +153,34 @@
   <div class="card">
     <h2>Chat &mdash; Microsoft.Extensions.AI</h2>
     <p class="desc">POST /api/chat &mdash; IChatClient adapted from Semantic Kernel.</p>
+    <div id="chat-output" class="output empty">Conversation will appear here.</div>
     <textarea id="chat-input">What is the capital of France?</textarea>
-    <button id="chat-send">Send</button>
-    <div id="chat-output" class="output empty">Response will appear here.</div>
+    <div class="actions">
+      <button id="chat-send">Send</button>
+      <button id="chat-reset" class="secondary">New conversation</button>
+    </div>
   </div>
 
   <div class="card">
     <h2>Streaming Chat &mdash; Microsoft.Extensions.AI</h2>
     <p class="desc">POST /api/chat/stream &mdash; tokens appended live as they arrive.</p>
+    <div id="stream-output" class="output empty">Conversation will appear here.</div>
     <textarea id="stream-input">Write a short haiku about local AI.</textarea>
-    <button id="stream-send">Send (stream)</button>
-    <div id="stream-output" class="output empty">Response will appear here.</div>
+    <div class="actions">
+      <button id="stream-send">Send (stream)</button>
+      <button id="stream-reset" class="secondary">New conversation</button>
+    </div>
   </div>
 
   <div class="card">
     <h2>Agent &mdash; Semantic Kernel</h2>
     <p class="desc">POST /api/agent &mdash; function-calling enabled (TimePlugin).</p>
+    <div id="agent-output" class="output empty">Conversation will appear here.</div>
     <textarea id="agent-input">What time is it right now?</textarea>
-    <button id="agent-send">Ask agent</button>
-    <div id="agent-output" class="output empty">Response will appear here.</div>
+    <div class="actions">
+      <button id="agent-send">Ask agent</button>
+      <button id="agent-reset" class="secondary">New conversation</button>
+    </div>
   </div>
 
   <div class="card">
@@ -178,123 +208,205 @@
     }
   }
 
+  // Parses a text/event-stream body. EventSource can't be used because it only supports GET.
+  // Events are separated by a blank line; each has an "event:" name and a JSON "data:" line.
+  async function readServerSentEvents(stream, onEvent) {
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // A network chunk can end mid-event, so only complete blocks are consumed.
+      let separator;
+      while ((separator = buffer.indexOf('\n\n')) >= 0) {
+        const block = buffer.slice(0, separator);
+        buffer = buffer.slice(separator + 2);
+
+        let event = 'message';
+        let data = '';
+        for (const line of block.split('\n')) {
+          if (line.startsWith('event: ')) event = line.slice(7);
+          else if (line.startsWith('data: ')) data += line.slice(6);
+        }
+        if (data) onEvent(event, JSON.parse(data));
+      }
+    }
+  }
+
   function setOutput(el, text, isError) {
     el.textContent = text;
     el.classList.toggle('err', !!isError);
     el.classList.toggle('empty', !text);
   }
 
-  function wireSimpleEndpoint({ buttonId, inputId, outputId, url }) {
-    const button = $(buttonId);
-    const input = $(inputId);
-    const output = $(outputId);
+  // Sends one JSON reply request and returns the reply text.
+  async function requestReply(url, body) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`Error ${res.status}: ${await readProblemDetail(res)}`);
+    return (await res.json()).reply;
+  }
+
+  // Sends one streaming request, calling onText with the reply so far as tokens arrive.
+  async function requestStreamedReply(url, body, onText) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok || !res.body) throw new Error(`Error ${res.status}: ${await readProblemDetail(res)}`);
+
+    let text = '';
+    let failure = null;
+    await readServerSentEvents(res.body, (event, data) => {
+      if (event === 'token') {
+        text += data.text;
+        onText(text);
+      } else if (event === 'error') {
+        failure = data;
+      }
+    });
+
+    if (failure) throw new Error(`Stream failed (${failure.status}): ${failure.detail}`);
+    return text;
+  }
+
+  // An empty selection omits `model`, so the API falls back to FoundryLocal:ModelId.
+  function selectedModel() {
+    const model = $('model-select').value;
+    return model ? { model } : {};
+  }
+
+  // Offers each catalog alias once (the catalog lists several hardware variants per alias),
+  // keeping the current choice if it is still available.
+  function populateModelPicker(models) {
+    const select = $('model-select');
+    const previous = select.value;
+    const aliases = [...new Set(models.map((m) => m.alias))].sort();
+
+    select.replaceChildren(new Option('Configured default', ''), ...aliases.map((alias) => new Option(alias, alias)));
+    if (aliases.includes(previous)) select.value = previous;
+  }
+
+  function appendMessage(output, who, text, isError) {
+    const message = document.createElement('div');
+    message.className = `msg ${isError ? 'error' : who}`;
+
+    const label = document.createElement('span');
+    label.className = 'who';
+    label.textContent = isError ? 'error' : who;
+
+    const body = document.createElement('span');
+    body.textContent = text;
+
+    message.append(label, body);
+    output.classList.remove('empty');
+    output.appendChild(message);
+    output.scrollTop = output.scrollHeight;
+    return body;
+  }
+
+  // Wires one card as a multi-turn conversation. The API is stateless, so the page keeps the
+  // transcript and sends it back as `history` with every new message.
+  function wireConversation({ prefix, send }) {
+    const button = $(`${prefix}-send`);
+    const reset = $(`${prefix}-reset`);
+    const input = $(`${prefix}-input`);
+    const output = $(`${prefix}-output`);
+    let history = [];
+
+    reset.addEventListener('click', () => {
+      history = [];
+      output.replaceChildren();
+      setOutput(output, 'Conversation will appear here.', false);
+      output.classList.add('empty');
+    });
 
     button.addEventListener('click', async () => {
       const message = input.value.trim();
       if (!message) return;
 
-      button.disabled = true;
-      setOutput(output, 'Thinking…', false);
+      if (!history.length) output.replaceChildren();
+      button.disabled = reset.disabled = true;
+      appendMessage(output, 'user', message, false);
+      const replyBody = appendMessage(output, 'assistant', '…', false);
 
       try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message }),
+        const reply = await send({ message, history, ...selectedModel() }, (partial) => {
+          replyBody.textContent = partial;
+          output.scrollTop = output.scrollHeight;
         });
+        replyBody.textContent = reply || '(empty response)';
 
-        if (!res.ok) {
-          setOutput(output, `Error ${res.status}: ${await readProblemDetail(res)}`, true);
-          return;
-        }
-
-        const data = await res.json();
-        setOutput(output, data.reply, false);
+        // Only completed exchanges join the history; a failed turn can simply be retried.
+        history.push({ role: 'user', content: message }, { role: 'assistant', content: reply });
+        input.value = '';
       } catch (err) {
-        setOutput(output, `Request failed: ${err.message}`, true);
+        replyBody.parentElement.remove();
+        appendMessage(output, 'assistant', err.message, true);
       } finally {
-        button.disabled = false;
+        button.disabled = reset.disabled = false;
       }
     });
   }
 
-  wireSimpleEndpoint({ buttonId: 'chat-send', inputId: 'chat-input', outputId: 'chat-output', url: '/api/chat' });
-  wireSimpleEndpoint({ buttonId: 'agent-send', inputId: 'agent-input', outputId: 'agent-output', url: '/api/agent' });
+  wireConversation({ prefix: 'chat', send: (body) => requestReply('/api/chat', body) });
+  wireConversation({ prefix: 'agent', send: (body) => requestReply('/api/agent', body) });
+  wireConversation({ prefix: 'stream', send: (body, onText) => requestStreamedReply('/api/chat/stream', body, onText) });
 
-  $('stream-send').addEventListener('click', async () => {
-    const button = $('stream-send');
-    const input = $('stream-input');
-    const output = $('stream-output');
-    const message = input.value.trim();
-    if (!message) return;
-
-    button.disabled = true;
-    setOutput(output, '', false);
-
-    try {
-      const res = await fetch('/api/chat/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
-      });
-
-      if (!res.ok || !res.body) {
-        setOutput(output, `Error ${res.status}: ${await readProblemDetail(res)}`, true);
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let text = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        text += decoder.decode(value, { stream: true });
-        setOutput(output, text, false);
-      }
-
-      if (!text) setOutput(output, '(empty response)', false);
-    } catch (err) {
-      setOutput(output, `Request failed: ${err.message}`, true);
-    } finally {
-      button.disabled = false;
+  // Built with DOM nodes and textContent (not innerHTML) so model names are never parsed as markup.
+  function buildModelsTable(models) {
+    const table = document.createElement('table');
+    const headerRow = table.createTHead().insertRow();
+    for (const title of ['Alias', 'Id']) {
+      const th = document.createElement('th');
+      th.textContent = title;
+      headerRow.appendChild(th);
     }
-  });
+
+    const body = table.createTBody();
+    for (const model of models) {
+      const row = body.insertRow();
+      row.insertCell().textContent = model.alias;
+      row.insertCell().textContent = model.id;
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'models-wrap';
+    wrap.appendChild(table);
+    return wrap;
+  }
 
   async function loadModels() {
     const output = $('models-output');
-    const badge = $('foundry-badge');
     setOutput(output, 'Loading…', false);
 
     try {
       const res = await fetch('/api/foundry/models');
       if (!res.ok) {
-        const detail = await readProblemDetail(res);
-        setOutput(output, `Error ${res.status}: ${detail}`, true);
-        badge.textContent = 'Foundry Local: unreachable';
-        badge.className = 'badge err';
+        setOutput(output, `Error ${res.status}: ${await readProblemDetail(res)}`, true);
         return;
       }
 
       const models = await res.json();
-      badge.textContent = `Foundry Local: ${models.length} models cataloged`;
-      badge.className = 'badge ok';
+      populateModelPicker(models);
 
       if (!models.length) {
         setOutput(output, '(no models found)', false);
         return;
       }
 
-      const rows = models
-        .map((m) => `<tr><td>${m.alias}</td><td>${m.id}</td></tr>`)
-        .join('');
       output.classList.remove('empty', 'err');
-      output.innerHTML = `<div class="models-wrap"><table><thead><tr><th>Alias</th><th>Id</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      output.replaceChildren(buildModelsTable(models));
     } catch (err) {
       setOutput(output, `Request failed: ${err.message}`, true);
-      badge.textContent = 'Foundry Local: unreachable';
-      badge.className = 'badge err';
     }
   }
 
@@ -317,7 +429,24 @@
     }
   }
 
+  // GET /health answers 200 or 503 with the same JSON shape, so both are read the same way.
+  async function checkFoundryLocal() {
+    const badge = $('foundry-badge');
+    try {
+      const report = await (await fetch('/health')).json();
+      const healthy = report.status === 'Healthy';
+      badge.textContent = `Foundry Local: ${healthy ? 'reachable' : 'unreachable'}`;
+      badge.title = report.checks.map((check) => check.description).join(' ');
+      badge.className = `badge ${healthy ? 'ok' : 'err'}`;
+    } catch (err) {
+      badge.textContent = 'Foundry Local: unknown';
+      badge.title = err.message;
+      badge.className = 'badge err';
+    }
+  }
+
   checkApi();
+  checkFoundryLocal();
   loadModels();
 </script>
 

@@ -1,14 +1,23 @@
 using LocalFoundry.Api.Services;
+using Microsoft.Extensions.AI;
 
 namespace LocalFoundry.Api.Tests.Fakes;
 
-/// <summary>Scriptable <see cref="IAgentService"/> that echoes a fixed reply or throws.</summary>
+/// <summary>Scriptable <see cref="IAgentService"/> that returns a fixed reply or throws, recording what it was asked.</summary>
 public sealed class FakeAgentService : IAgentService
 {
     public string Reply { get; set; } = "It is noon.";
 
     public Exception? ExceptionToThrow { get; set; }
 
-    public Task<string> AskAsync(string message, CancellationToken cancellationToken) =>
-        ExceptionToThrow is null ? Task.FromResult(Reply) : Task.FromException<string>(ExceptionToThrow);
+    public IReadOnlyList<ChatMessage> LastMessages { get; private set; } = [];
+
+    public string? LastModelId { get; private set; }
+
+    public Task<string> AskAsync(IEnumerable<ChatMessage> messages, string? modelId, CancellationToken cancellationToken)
+    {
+        LastMessages = messages.ToList();
+        LastModelId = modelId;
+        return ExceptionToThrow is null ? Task.FromResult(Reply) : Task.FromException<string>(ExceptionToThrow);
+    }
 }

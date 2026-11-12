@@ -1,6 +1,7 @@
 using LocalFoundry.Api.Models;
 using LocalFoundry.Api.Validation;
 using LocalFoundry.Api.Services;
+using LocalFoundry.Api.Timeouts;
 
 namespace LocalFoundry.Api.Endpoints;
 
@@ -16,13 +17,20 @@ public static class AgentEndpoints
     public static IEndpointRouteBuilder MapAgentEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/agent", AskAgentAsync)
-            .AddEndpointFilter<ChatRequestValidationFilter>();
+            .AddEndpointFilter<ChatRequestValidationFilter>()
+            .WithName("AskAgent")
+            .WithTags("Agent")
+            .WithSummary("Sends a message to a model that may call tools (function calling) before replying.")
+            .Produces<ChatReply>()
+            .ProducesValidationProblem()
+            .ProducesFoundryLocalProblems()
+            .WithRequestTimeout(ModelRequestTimeout.PolicyName);
         return app;
     }
 
     private static async Task<IResult> AskAgentAsync(ChatRequest request, IAgentService agent, CancellationToken ct)
     {
-        var reply = await agent.AskAsync(request.Message, ct);
+        var reply = await agent.AskAsync(request.ToChatMessages(), request.Model, ct);
         return Results.Ok(new ChatReply(reply));
     }
 }

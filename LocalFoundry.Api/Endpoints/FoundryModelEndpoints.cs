@@ -1,4 +1,6 @@
+using LocalFoundry.Api.Models;
 using LocalFoundry.Api.Services;
+using LocalFoundry.Api.Timeouts;
 
 namespace LocalFoundry.Api.Endpoints;
 
@@ -13,7 +15,13 @@ public static class FoundryModelEndpoints
     /// <returns>The same route builder, for chaining.</returns>
     public static IEndpointRouteBuilder MapFoundryModelEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/foundry/models", ListModelsAsync);
+        app.MapGet("/api/foundry/models", ListModelsAsync)
+            .WithName("ListModels")
+            .WithTags("Models")
+            .WithSummary("Lists the models in the local Foundry catalog.")
+            .Produces<IReadOnlyList<FoundryModelSummary>>()
+            .ProducesFoundryLocalProblems()
+            .WithRequestTimeout(ModelRequestTimeout.PolicyName);
         return app;
     }
 

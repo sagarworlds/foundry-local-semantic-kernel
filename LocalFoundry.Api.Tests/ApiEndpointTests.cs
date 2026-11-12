@@ -38,6 +38,24 @@ public sealed class ApiEndpointTests : IDisposable
     }
 
     [Fact]
+    public async Task OpenApi_DescribesEveryApiEndpointAndItsErrorResponses()
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
+        var paths = document.RootElement.GetProperty("paths");
+
+        foreach (var path in new[] { "/api/info", "/api/chat", "/api/chat/stream", "/api/agent", "/api/foundry/models" })
+        {
+            Assert.True(paths.TryGetProperty(path, out _), $"OpenAPI document is missing {path}");
+        }
+
+        var chatResponses = paths.GetProperty("/api/chat").GetProperty("post").GetProperty("responses");
+        foreach (var status in new[] { "200", "400", "502", "503", "504" })
+        {
+            Assert.True(chatResponses.TryGetProperty(status, out _), $"POST /api/chat is missing a documented {status} response");
+        }
+    }
+
+    [Fact]
     public async Task Health_FoundryLocalReachable_Returns200AndProbesTheModelsEndpoint()
     {
         var response = await _client.GetAsync("/health");

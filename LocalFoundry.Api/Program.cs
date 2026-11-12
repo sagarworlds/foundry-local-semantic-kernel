@@ -11,6 +11,9 @@ builder.Services.AddLocalFoundryAi(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<FoundryLocalExceptionHandler>();
 
+// Machine-readable description of the API, served at /openapi/v1.json.
+builder.Services.AddOpenApi();
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
@@ -20,6 +23,7 @@ app.UseRequestTimeouts();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+app.MapOpenApi();
 app.MapLocalFoundryApi();
 
 app.Run();

@@ -18,6 +18,12 @@ public static class AgentEndpoints
     {
         app.MapPost("/api/agent", AskAgentAsync)
             .AddEndpointFilter<ChatRequestValidationFilter>()
+            .WithName("AskAgent")
+            .WithTags("Agent")
+            .WithSummary("Sends a message to a model that may call tools (function calling) before replying.")
+            .Produces<ChatReply>()
+            .ProducesValidationProblem()
+            .ProducesFoundryLocalProblems()
             .WithRequestTimeout(ModelRequestTimeout.PolicyName);
         return app;
     }

@@ -24,11 +24,24 @@ public static class ChatEndpoints
     public static IEndpointRouteBuilder MapChatEndpoints(this IEndpointRouteBuilder app)
     {
         var chat = app.MapGroup("/api/chat")
-            .AddEndpointFilter<ChatRequestValidationFilter>();
+            .AddEndpointFilter<ChatRequestValidationFilter>()
+            .WithTags("Chat")
+            .ProducesValidationProblem()
+            .ProducesFoundryLocalProblems();
         chat.WithRequestTimeout(ModelRequestTimeout.PolicyName);
 
-        chat.MapPost("/", ChatAsync);
-        chat.MapPost("/stream", StreamChatAsync);
+        chat.MapPost("/", ChatAsync)
+            .WithName("Chat")
+            .WithSummary("Sends a message (with optional history) and returns the model's complete reply.")
+            .Produces<ChatReply>();
+
+        chat.MapPost("/stream", StreamChatAsync)
+            .WithName("ChatStream")
+            .WithSummary("Sends a message and streams the reply as Server-Sent Events.")
+            .WithDescription(
+                "Emits 'token' events with {\"text\"} as the reply is generated, then a final 'done' event. " +
+                "If the stream fails part-way it ends with an 'error' event carrying {\"status\",\"title\",\"detail\"} instead.")
+            .Produces<string>(StatusCodes.Status200OK, "text/event-stream");
         return app;
     }
 

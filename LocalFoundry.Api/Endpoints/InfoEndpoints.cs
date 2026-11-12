@@ -15,12 +15,16 @@ public static class InfoEndpoints
             endpoints = new[]
             {
                 "GET /health",
+                "GET /openapi/v1.json",
                 "POST /api/chat",
                 "POST /api/chat/stream",
                 "POST /api/agent",
                 "GET /api/foundry/models",
             },
-        }));
+        }))
+            .WithName("GetInfo")
+            .WithTags("Info")
+            .WithSummary("Describes the service and lists its endpoints.");
 
         return app;
     }

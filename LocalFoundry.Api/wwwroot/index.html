@@ -27,6 +27,7 @@
   }
   h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
   .subtitle { color: var(--muted); margin: 0 0 1.5rem; font-size: 0.9rem; }
+  a { color: var(--accent); }
   .status-bar {
     display: flex;
     flex-wrap: wrap;
@@ -135,7 +136,7 @@
 <body>
 
 <h1>LocalFoundry.Api Test Console</h1>
-<p class="subtitle">Plain HTML + JS page hitting the API's own endpoints (same origin, no CORS setup needed).</p>
+<p class="subtitle">Plain HTML + JS page hitting the API's own endpoints (same origin, no CORS setup needed). <a href="/openapi/v1.json">OpenAPI description</a></p>
 
 <div class="status-bar">
   <span id="api-badge" class="badge pending">API: checking…</span>

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using LocalFoundry.Api.Models;
 using Microsoft.AI.Foundry.Local;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.SemanticKernel;
 
@@ -92,15 +93,48 @@ public sealed class ApiEndpointTests : IDisposable
     }
 
     [Fact]
-    public async Task ChatStream_ValidMessage_StreamsAllChunks()
+    public async Task ChatStream_ValidMessage_SendsTokenEventsThenDone()
     {
         _factory.ChatClient.Chunks = ["Hello", " there", "!"];
 
         var response = await _client.PostAsJsonAsync("/api/chat/stream", new ChatRequest("hi"));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("text/plain", response.Content.Headers.ContentType!.MediaType);
-        Assert.Equal("Hello there!", await response.Content.ReadAsStringAsync());
+        Assert.Equal("text/event-stream", response.Content.Headers.ContentType!.MediaType);
+
+        var events = SseEvent.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(["token", "token", "token", "done"], events.Select(e => e.Name));
+        Assert.Equal("Hello there!", string.Concat(events.Where(e => e.Name == "token").Select(e => e.Read<ChatStreamToken>().Text)));
+    }
+
+    [Fact]
+    public async Task ChatStream_FailureMidStream_SendsErrorEventInsteadOfDone()
+    {
+        _factory.ChatClient.Chunks = ["Hello"];
+        _factory.ChatClient.ExceptionAfterChunks = new HttpRequestException("Connection reset");
+
+        var response = await _client.PostAsJsonAsync("/api/chat/stream", new ChatRequest("hi"));
+
+        // The status was committed before the failure, so the error can only travel in-band.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var events = SseEvent.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(["token", "error"], events.Select(e => e.Name));
+
+        var error = events[^1].Read<ChatStreamError>();
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, error.Status);
+        Assert.Contains("Connection reset", error.Detail);
+    }
+
+    [Fact]
+    public async Task ChatStream_UnexpectedFailureMidStream_SendsGenericErrorWithoutInternals()
+    {
+        _factory.ChatClient.ExceptionAfterChunks = new InvalidOperationException("secret internal detail");
+
+        var response = await _client.PostAsJsonAsync("/api/chat/stream", new ChatRequest("hi"));
+
+        var error = SseEvent.Parse(await response.Content.ReadAsStringAsync())[^1].Read<ChatStreamError>();
+        Assert.Equal(StatusCodes.Status500InternalServerError, error.Status);
+        Assert.DoesNotContain("secret internal detail", error.Detail);
     }
 
     [Fact]

@@ -80,7 +80,7 @@ Open **http://localhost:5189/** — it serves a plain HTML+JS test console (`www
 | GET | `/` | HTML test console (`wwwroot/index.html`) |
 | GET | `/api/info` | Service info (JSON) |
 | POST | `/api/chat` | Plain chat via `IChatClient` (Microsoft.Extensions.AI) |
-| POST | `/api/chat/stream` | Streaming variant of the above |
+| POST | `/api/chat/stream` | Streaming variant of the above, as Server-Sent Events |
 | POST | `/api/agent` | Semantic Kernel chat with function-calling enabled (`TimePlugin`) |
 | GET | `/api/foundry/models` | Lists the local Foundry model catalog via the native SDK |
 
@@ -111,7 +111,17 @@ Failures are handled centrally by `FoundryLocalExceptionHandler`, which logs the
 | `503` | Foundry Local couldn't be reached — daemon not running, or on a different port than `Endpoint` |
 | `500` | Any other, unexpected error (a bug in this app — check the logs) |
 
-For `/api/chat/stream`, errors that occur before the first token get the same status codes; once streaming has started, a failure can only abort the connection.
+`/api/chat/stream` responds with `text/event-stream`. Errors that occur before the first token get the status codes above. After that the status is already `200`, so the outcome is reported in the stream itself:
+
+```
+event: token
+data: {"text":"Hello"}
+
+event: done
+data: {}
+```
+
+A stream that fails part-way ends with `event: error` and `data: {"status":503,"title":"...","detail":"..."}` instead of `done`, so a client can always tell a finished reply from a broken one.
 
 ## Running the tests
 

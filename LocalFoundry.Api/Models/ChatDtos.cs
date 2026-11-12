@@ -12,3 +12,13 @@ public sealed record ChatReply(string Reply);
 /// <param name="Alias">Short alias used with the <c>foundry model</c> CLI commands and as <c>FoundryLocal:ModelId</c>.</param>
 /// <param name="Id">Full, hardware-specific model variant identifier.</param>
 public sealed record FoundryModelSummary(string Alias, string Id);
+
+/// <summary>Payload of a <c>token</c> event on the streaming chat endpoint.</summary>
+/// <param name="Text">The next fragment of the model's reply.</param>
+public sealed record ChatStreamToken(string Text);
+
+/// <summary>Payload of an <c>error</c> event on the streaming chat endpoint, sent when the stream fails part-way.</summary>
+/// <param name="Status">The HTTP status the failure would have had if it had occurred before streaming began.</param>
+/// <param name="Title">Short summary of the problem.</param>
+/// <param name="Detail">Actionable explanation of the problem.</param>
+public sealed record ChatStreamError(int Status, string Title, string Detail);

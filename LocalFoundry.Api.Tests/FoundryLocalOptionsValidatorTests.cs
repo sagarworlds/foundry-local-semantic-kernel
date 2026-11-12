@@ -37,6 +37,17 @@ public class FoundryLocalOptionsValidatorTests
         Assert.Contains("FoundryLocal:ApiKey", result.FailureMessage);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public void Validate_NonPositiveTimeout_Fails(int seconds)
+    {
+        var result = _validator.Validate(null, new FoundryLocalOptions { RequestTimeoutSeconds = seconds });
+
+        Assert.True(result.Failed);
+        Assert.Contains("FoundryLocal:RequestTimeoutSeconds", result.FailureMessage);
+    }
+
     [Fact]
     public void App_WithInvalidConfiguration_FailsAtStartup()
     {

@@ -31,6 +31,11 @@ public sealed class FoundryLocalOptionsValidator : IValidateOptions<FoundryLocal
             failures.Add("FoundryLocal:ApiKey must not be empty; any placeholder value works because Foundry Local ignores it.");
         }
 
+        if (options.RequestTimeoutSeconds <= 0)
+        {
+            failures.Add($"FoundryLocal:RequestTimeoutSeconds must be greater than 0, but was {options.RequestTimeoutSeconds}.");
+        }
+
         return failures.Count > 0 ? ValidateOptionsResult.Fail(failures) : ValidateOptionsResult.Success;
     }
 }

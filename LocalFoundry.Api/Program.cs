@@ -14,6 +14,7 @@ builder.Services.AddExceptionHandler<FoundryLocalExceptionHandler>();
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseRequestTimeouts();
 
 // Serves wwwroot/index.html (a plain HTML+JS test console) at "/".
 app.UseDefaultFiles();

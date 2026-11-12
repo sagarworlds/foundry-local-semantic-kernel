@@ -1,4 +1,5 @@
 using LocalFoundry.Api.Services;
+using LocalFoundry.Api.Timeouts;
 
 namespace LocalFoundry.Api.Endpoints;
 
@@ -13,7 +14,8 @@ public static class FoundryModelEndpoints
     /// <returns>The same route builder, for chaining.</returns>
     public static IEndpointRouteBuilder MapFoundryModelEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/foundry/models", ListModelsAsync);
+        app.MapGet("/api/foundry/models", ListModelsAsync)
+            .WithRequestTimeout(ModelRequestTimeout.PolicyName);
         return app;
     }
 

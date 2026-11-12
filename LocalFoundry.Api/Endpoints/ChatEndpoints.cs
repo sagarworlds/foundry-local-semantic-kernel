@@ -1,6 +1,8 @@
 using LocalFoundry.Api.ErrorHandling;
 using LocalFoundry.Api.Models;
+using LocalFoundry.Api.Timeouts;
 using LocalFoundry.Api.Validation;
+using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.Extensions.AI;
 
 namespace LocalFoundry.Api.Endpoints;
@@ -23,6 +25,7 @@ public static class ChatEndpoints
     {
         var chat = app.MapGroup("/api/chat")
             .AddEndpointFilter<ChatRequestValidationFilter>();
+        chat.WithRequestTimeout(ModelRequestTimeout.PolicyName);
 
         chat.MapPost("/", ChatAsync);
         chat.MapPost("/stream", StreamChatAsync);
@@ -48,6 +51,10 @@ public static class ChatEndpoints
             cancellationToken: ct).GetAsyncEnumerator(ct);
 
         var hasUpdate = await updates.MoveNextAsync();
+
+        // The timeout guards against a model that never answers. Once tokens are flowing, a
+        // long reply is legitimate and must not be cut off mid-sentence.
+        httpResponse.HttpContext.Features.Get<IHttpRequestTimeoutFeature>()?.DisableTimeout();
 
         var events = new ServerSentEventWriter(httpResponse);
         events.Start();

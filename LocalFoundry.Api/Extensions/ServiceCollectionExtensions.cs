@@ -1,6 +1,8 @@
 using LocalFoundry.Api.Options;
 using LocalFoundry.Api.Plugins;
 using LocalFoundry.Api.Services;
+using LocalFoundry.Api.Timeouts;
+using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
@@ -15,7 +17,7 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the Semantic Kernel <see cref="Kernel"/>, the <see cref="IChatClient"/> adapter over it,
-    /// the agent service and the Foundry Local catalog service.
+    /// the agent service, the Foundry Local catalog service and the model-call timeout policy.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
     /// <param name="configuration">Configuration containing the <c>FoundryLocal</c> section.</param>
@@ -26,6 +28,9 @@ public static class ServiceCollectionExtensions
         services.AddOptions<FoundryLocalOptions>()
             .Bind(configuration.GetSection("FoundryLocal"))
             .ValidateOnStart();
+
+        services.AddRequestTimeouts();
+        services.AddSingleton<IConfigureOptions<RequestTimeoutOptions>, ModelRequestTimeout>();
 
         // Semantic Kernel: orchestration layer. Points at Foundry Local's OpenAI-compatible
         // endpoint (run `foundry server start --port 5273` first - see README).

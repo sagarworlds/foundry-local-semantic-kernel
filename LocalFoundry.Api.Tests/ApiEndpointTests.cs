@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using LocalFoundry.Api.Models;
 using Microsoft.AI.Foundry.Local;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.SemanticKernel;
@@ -145,6 +146,22 @@ public sealed class ApiEndpointTests : IDisposable
         var response = await _client.PostAsJsonAsync("/api/chat/stream", new ChatRequest("hi"));
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/api/chat")]
+    [InlineData("/api/chat/stream")]
+    public async Task ChatEndpoints_ModelSlowerThanTimeout_Return504Problem(string path)
+    {
+        using var factory = _factory.WithWebHostBuilder(b => b.UseSetting("FoundryLocal:RequestTimeoutSeconds", "1"));
+        using var client = factory.CreateClient();
+        _factory.ChatClient.Delay = TimeSpan.FromSeconds(30);
+
+        var response = await client.PostAsJsonAsync(path, new ChatRequest("hi"));
+
+        Assert.Equal(HttpStatusCode.GatewayTimeout, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.Contains("RequestTimeoutSeconds", problem!.Detail);
     }
 
     [Fact]

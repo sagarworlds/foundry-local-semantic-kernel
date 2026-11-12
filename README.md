@@ -53,12 +53,16 @@ HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
 "FoundryLocal": {
   "Endpoint": "http://localhost:5273/v1",
   "ModelId": "qwen2.5-0.5b",
-  "ApiKey": "not-needed"
+  "ApiKey": "not-needed",
+  "RequestTimeoutSeconds": 120
 }
 ```
 
 - `Endpoint` / `ModelId` must match the port `foundry server start --port <port>` is bound to and the alias `foundry model load <alias>` has loaded.
 - `ApiKey` is required by the OpenAI connector's API shape but ignored by Foundry Local.
+- `RequestTimeoutSeconds` is how long to wait for Foundry Local before returning `504`. For `/api/chat/stream` it only covers the wait for the first token.
+
+The settings are validated at startup: the app refuses to start, naming the bad setting, if `Endpoint` isn't an http(s) URL, `ModelId`/`ApiKey` is empty or the timeout isn't positive.
 
 ## Running
 
@@ -109,6 +113,7 @@ Failures are handled centrally by `FoundryLocalExceptionHandler`, which logs the
 | `400` | Invalid request body (see above) |
 | `502` | Foundry Local responded with an error — typically the configured `ModelId` isn't loaded |
 | `503` | Foundry Local couldn't be reached — daemon not running, or on a different port than `Endpoint` |
+| `504` | Foundry Local didn't answer within `RequestTimeoutSeconds` |
 | `500` | Any other, unexpected error (a bug in this app — check the logs) |
 
 `/api/chat/stream` responds with `text/event-stream`. Errors that occur before the first token get the status codes above. After that the status is already `200`, so the outcome is reported in the stream itself:

@@ -17,21 +17,25 @@ public sealed class FakeChatClient : IChatClient
     /// <summary>Thrown by streaming calls after all <see cref="Chunks"/> have been yielded.</summary>
     public Exception? ExceptionAfterChunks { get; set; }
 
+    /// <summary>Simulated time the model takes before answering (or before its first chunk).</summary>
+    public TimeSpan Delay { get; set; } = TimeSpan.Zero;
+
     public int CallCount { get; private set; }
 
-    public Task<ChatResponse> GetResponseAsync(
+    public async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         CallCount++;
+        await Task.Delay(Delay, cancellationToken);
         ThrowIfConfigured();
-        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, string.Concat(Chunks))));
+        return new ChatResponse(new ChatMessage(ChatRole.Assistant, string.Concat(Chunks)));
     }
 
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         CallCount++;
-        await Task.Yield();
+        await Task.Delay(Delay, cancellationToken);
         ThrowIfConfigured();
 
         foreach (var chunk in Chunks)

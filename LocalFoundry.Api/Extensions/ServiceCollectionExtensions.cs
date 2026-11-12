@@ -22,7 +22,10 @@ public static class ServiceCollectionExtensions
     /// <returns>The same service collection, for chaining.</returns>
     public static IServiceCollection AddLocalFoundryAi(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<FoundryLocalOptions>(configuration.GetSection("FoundryLocal"));
+        services.AddSingleton<IValidateOptions<FoundryLocalOptions>, FoundryLocalOptionsValidator>();
+        services.AddOptions<FoundryLocalOptions>()
+            .Bind(configuration.GetSection("FoundryLocal"))
+            .ValidateOnStart();
 
         // Semantic Kernel: orchestration layer. Points at Foundry Local's OpenAI-compatible
         // endpoint (run `foundry server start --port 5273` first - see README).

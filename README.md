@@ -203,6 +203,11 @@ LocalFoundry.Api/
   wwwroot/index.html                         Browser test console for all endpoints
 LocalFoundry.Api.Tests/                      xUnit unit and in-memory HTTP tests
 Directory.Packages.props                     NuGet package versions for both projects (central package management)
+LICENSE                                      Apache License 2.0
 .github/workflows/ci.yml                     Build and test on pull requests and pushes to main
 .github/dependabot.yml                       Weekly NuGet and GitHub Actions update PRs
 ```
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).

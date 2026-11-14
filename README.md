@@ -26,7 +26,7 @@ HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
 
 ## Prerequisites
 
-- .NET 9 SDK or later
+- .NET 10 SDK or later
 - [Foundry Local](https://learn.microsoft.com/azure/ai-foundry/foundry-local/get-started) installed:
   ```powershell
   winget install Microsoft.FoundryLocal

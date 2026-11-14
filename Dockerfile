@@ -4,7 +4,7 @@
 # The model itself does NOT run in this container. Foundry Local runs on the host and the
 # API reaches it over HTTP (see FoundryLocal__Endpoint below and the README).
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Restore first, from only the files that affect it, so Docker reuses this layer until a
@@ -20,7 +20,7 @@ RUN dotnet publish LocalFoundry.Api/LocalFoundry.Api.csproj -c Release --no-rest
 # This container never runs inference (Foundry Local on the host does), so they are dead weight.
 RUN rm -f /app/publish/*cuda*.so /app/publish/*.dbg /app/publish/*.pdb
 
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish ./
 

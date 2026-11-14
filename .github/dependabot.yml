@@ -19,7 +19,7 @@ updates:
           - xunit*
           - Microsoft.NET.Test.Sdk
     ignore:
-      # The project targets .NET 9, so ASP.NET Core packages must stay on 9.x until the
+      # The project targets .NET 10, so ASP.NET Core packages must stay on 10.x until the
       # target framework itself is upgraded.
       - dependency-name: Microsoft.AspNetCore.*
         update-types: [version-update:semver-major]

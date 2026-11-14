@@ -1,5 +1,4 @@
 using LocalFoundry.Api.Options;
-using LocalFoundry.Api.Plugins;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 
@@ -20,19 +19,22 @@ public sealed class FoundryLocalKernelProvider : IKernelProvider
 
     private readonly FoundryLocalOptions _options;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly TimeProvider _timeProvider;
+    private readonly IReadOnlyList<KernelPlugin> _plugins;
     private readonly Lazy<Kernel> _defaultKernel;
 
     /// <summary>Creates the provider.</summary>
     /// <param name="options">Endpoint, default model and API key.</param>
     /// <param name="httpClientFactory">Supplies the pooled <see cref="HttpClient"/> the connector sends requests with.</param>
-    /// <param name="timeProvider">Clock handed to the <see cref="TimePlugin"/>.</param>
+    /// <param name="plugins">
+    /// Every registered <see cref="KernelPlugin"/>; each is offered to the model as callable tools.
+    /// New plugins are added by registering them in DI, without changing this class.
+    /// </param>
     public FoundryLocalKernelProvider(
-        IOptions<FoundryLocalOptions> options, IHttpClientFactory httpClientFactory, TimeProvider timeProvider)
+        IOptions<FoundryLocalOptions> options, IHttpClientFactory httpClientFactory, IEnumerable<KernelPlugin> plugins)
     {
         _options = options.Value;
         _httpClientFactory = httpClientFactory;
-        _timeProvider = timeProvider;
+        _plugins = [.. plugins];
         _defaultKernel = new Lazy<Kernel>(() => BuildKernel(_options.ModelId));
     }
 
@@ -55,7 +57,10 @@ public sealed class FoundryLocalKernelProvider : IKernelProvider
             apiKey: _options.ApiKey,
             httpClient: _httpClientFactory.CreateClient(HttpClientName));
 #pragma warning restore SKEXP0010
-        kernelBuilder.Plugins.AddFromObject(new TimePlugin(_timeProvider));
+        foreach (var plugin in _plugins)
+        {
+            kernelBuilder.Plugins.Add(plugin);
+        }
 
         return kernelBuilder.Build();
     }

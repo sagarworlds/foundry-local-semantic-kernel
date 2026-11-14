@@ -1,10 +1,12 @@
 using LocalFoundry.Api.Health;
 using LocalFoundry.Api.Options;
+using LocalFoundry.Api.Plugins;
 using LocalFoundry.Api.Services;
 using LocalFoundry.Api.Timeouts;
 using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
+using Microsoft.SemanticKernel;
 
 namespace LocalFoundry.Api.Extensions;
 
@@ -45,6 +47,7 @@ public static class ServiceCollectionExtensions
         // Semantic Kernel: orchestration layer, pointed at Foundry Local's OpenAI-compatible
         // endpoint (run `foundry server start --port 5273` first - see README).
         services.AddSingleton(TimeProvider.System);
+        services.AddAgentPlugins();
         services.AddSingleton<IKernelProvider, FoundryLocalKernelProvider>();
 
         // Microsoft.Extensions.AI: the framework-neutral abstraction endpoint code depends on.
@@ -54,5 +57,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IModelCatalogService, FoundryLocalCatalogService>();
 
         return services;
+    }
+
+    // The tools the agent may call. To add one, write a plugin class and register it here;
+    // the kernel provider picks up every registered KernelPlugin.
+    private static void AddAgentPlugins(this IServiceCollection services)
+    {
+        services.AddSingleton(sp =>
+            KernelPluginFactory.CreateFromObject(new TimePlugin(sp.GetRequiredService<TimeProvider>()), nameof(TimePlugin)));
+        services.AddSingleton(_ => KernelPluginFactory.CreateFromObject(new MathPlugin(), nameof(MathPlugin)));
     }
 }

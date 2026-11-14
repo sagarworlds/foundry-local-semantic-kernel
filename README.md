@@ -93,7 +93,7 @@ Open **http://localhost:5189/** — it serves a plain HTML+JS test console (`www
 | GET | `/health` | `Healthy` (200) if Foundry Local is reachable and the configured model is loaded, `Degraded` (200) if the model isn't loaded, `Unhealthy` (503) if unreachable; JSON body gives the reason |
 | POST | `/api/chat` | Plain chat via `IChatClient` (Microsoft.Extensions.AI) |
 | POST | `/api/chat/stream` | Streaming variant of the above, as Server-Sent Events |
-| POST | `/api/agent` | Semantic Kernel chat with function-calling enabled (`TimePlugin`) |
+| POST | `/api/agent` | Semantic Kernel chat with function-calling enabled (current time and arithmetic tools) |
 | POST | `/api/agent/stream` | Streaming variant of the agent endpoint, as Server-Sent Events |
 | GET | `/api/foundry/models` | Lists the local Foundry model catalog via the native SDK |
 
@@ -110,6 +110,17 @@ curl -X POST http://localhost:5189/api/agent \
 
 curl http://localhost:5189/api/foundry/models
 ```
+
+### Agent tools
+
+The agent endpoints let the model call these functions when it decides they help:
+
+| Plugin | Functions |
+|---|---|
+| `TimePlugin` | `GetCurrentTime` — the server's local date and time |
+| `MathPlugin` | `Add`, `Subtract`, `Multiply`, `Divide` — exact arithmetic, which language models are unreliable at |
+
+To add a tool, write a plugin class under `Plugins/` and register it in `AddAgentPlugins()` (`Extensions/ServiceCollectionExtensions.cs`). Very small models (such as `qwen2.5-0.5b`) often ignore or misuse tools; try a larger one if the agent doesn't call them.
 
 ### Multi-turn conversations
 
@@ -195,7 +206,7 @@ LocalFoundry.Api/
   ErrorHandling/                             Maps Foundry Local failures to 502/503 ProblemDetails
   Validation/                                ChatRequest validator + endpoint filter
   Options/                                   FoundryLocal (endpoint, model, timeout) and Agent (system prompt) settings + validation
-  Plugins/TimePlugin.cs                      Sample Semantic Kernel function
+  Plugins/                                   Tools the agent can call: TimePlugin (current time), MathPlugin (arithmetic)
   Models/ChatDtos.cs                         Request/response records
   Services/IKernelProvider.cs                Builds the Semantic Kernel for a given model (+ FoundryLocalKernelProvider)
   Services/ModelRoutingChatClient.cs         IChatClient that routes each call to the requested model's kernel

@@ -18,7 +18,7 @@ public sealed class FoundryLocalKernelProviderTests : IDisposable
         _provider = new FoundryLocalKernelProvider(
             Microsoft.Extensions.Options.Options.Create(new FoundryLocalOptions { ModelId = "default-model" }),
             _services.GetRequiredService<IHttpClientFactory>(),
-            TimeProvider.System);
+            [KernelPluginFactory.CreateFromObject(new MathPlugin(), "First"), KernelPluginFactory.CreateFromObject(new MathPlugin(), "Second")]);
     }
 
     public void Dispose() => _services.Dispose();
@@ -44,10 +44,12 @@ public sealed class FoundryLocalKernelProviderTests : IDisposable
         Assert.Equal("phi-4-mini", ModelIdOf(kernel));
     }
 
-    [Fact]
-    public void GetKernel_AnyModel_RegistersTheTimePlugin()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("phi-4-mini")]
+    public void GetKernel_AnyModel_RegistersEveryPluginItWasGiven(string? modelId)
     {
-        Assert.Contains(_provider.GetKernel("phi-4-mini").Plugins, plugin => plugin.Name == nameof(TimePlugin));
+        Assert.Equal(["First", "Second"], _provider.GetKernel(modelId).Plugins.Select(plugin => plugin.Name).Order());
     }
 
     private static string? ModelIdOf(Kernel kernel) => kernel.GetRequiredService<IChatCompletionService>().GetModelId();

@@ -51,3 +51,28 @@ jobs:
           name: test-results
           path: TestResults/*.trx
           if-no-files-found: ignore
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Build only (no push): proves the Dockerfile still works after project or package changes.
+      - name: Build image
+        run: docker build -t localfoundry-api:ci .
+
+      # The app must start and serve requests without Foundry Local being present.
+      - name: Smoke test
+        run: |
+          docker run -d --name api -p 8080:8080 localfoundry-api:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/api/info > /dev/null; then
+              echo "API answered after ${attempt}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::API did not answer within 30 seconds"
+          docker logs api
+          exit 1

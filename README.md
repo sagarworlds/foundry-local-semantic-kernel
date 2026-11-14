@@ -84,6 +84,28 @@ dotnet run
 
 The app starts even if Foundry Local isn't running yet — the chat/agent endpoints will return a `503` with setup instructions until it is.
 
+## Running in Docker
+
+The API can run in a container, but **the model can't**: Foundry Local stays on the host and the container calls it over HTTP.
+
+```bash
+foundry server start --port 5273        # on the host, with a model loaded
+docker compose up --build               # then open http://localhost:5189/
+```
+
+or without Compose:
+
+```bash
+docker build -t localfoundry-api .
+docker run --rm -p 5189:8080 --add-host=host.docker.internal:host-gateway localfoundry-api
+```
+
+- The image sets `FoundryLocal__Endpoint=http://host.docker.internal:5273/v1`. Override any setting with an environment variable, using `__` for `:` (for example `-e FoundryLocal__ModelId=phi-4-mini`).
+- **Docker Desktop (Windows/macOS):** `host.docker.internal` reaches Foundry Local on the host as is.
+- **Linux:** Foundry Local listens only on `127.0.0.1`, which a container on the default bridge network can't reach. Use host networking instead: `docker run --rm --network host -e FoundryLocal__Endpoint=http://localhost:5273/v1 localfoundry-api` (the API is then on port 8080).
+- The container listens on port 8080 and runs as a non-root user. `GET /health` tells you whether it can reach Foundry Local.
+- The image leaves out the SDK's GPU (CUDA) libraries, since no inference happens in the container.
+
 ## Try it in a browser
 
 Open **http://localhost:5189/** — it serves a plain HTML+JS test console (`wwwroot/index.html`) with a panel for each endpoint (chat, streaming chat, agent, model catalog) plus live status badges. It calls the API on the same origin, so no CORS setup is needed. This is the fastest way to check everything is wired correctly without writing any curl commands.
@@ -225,7 +247,7 @@ The tests don't need Foundry Local: they host the app in-memory with `WebApplica
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every pull request and push to `main`: restore, build with warnings as errors (including missing XML docs), and run the tests.
+`.github/workflows/ci.yml` runs on every pull request and push to `main`: restore, build with warnings as errors (including missing XML docs), and run the tests. A second job builds the Docker image and checks that the container starts.
 
 Dependabot (`.github/dependabot.yml`) opens weekly pull requests for NuGet and GitHub Actions updates, which CI then checks. The Semantic Kernel, Microsoft.Extensions.AI and Foundry Local packages are updated together as one group.
 
@@ -250,6 +272,7 @@ LocalFoundry.Api/
   Services/IModelCatalogService.cs           Model catalog abstraction (+ FoundryLocalCatalogService, lazy SDK wrapper)
   wwwroot/index.html                         Browser test console for all endpoints
 LocalFoundry.Api.Tests/                      xUnit unit and in-memory HTTP tests
+Dockerfile, docker-compose.yml               Container image for the API (Foundry Local stays on the host)
 Directory.Packages.props                     NuGet package versions for both projects (central package management)
 LICENSE                                      Apache License 2.0
 .github/workflows/ci.yml                     Build and test on pull requests and pushes to main

@@ -1,0 +1,16 @@
+# Runs the API in a container, talking to Foundry Local on the host machine.
+#   foundry server start --port 5273      (on the host, with a model loaded)
+#   docker compose up --build
+# Then open http://localhost:5189/
+
+services:
+  api:
+    build: .
+    ports:
+      - "5189:8080"
+    environment:
+      FoundryLocal__Endpoint: http://host.docker.internal:5273/v1
+      FoundryLocal__ModelId: qwen2.5-0.5b
+    extra_hosts:
+      # Docker Desktop defines this name itself; Linux needs the mapping to the host gateway.
+      - "host.docker.internal:host-gateway"

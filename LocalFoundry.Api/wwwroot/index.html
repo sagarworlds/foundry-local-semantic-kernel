@@ -315,48 +315,102 @@
     return body;
   }
 
-  // Wires one card as a multi-turn conversation. The API is stateless, so the page keeps the
-  // transcript and sends it back as `history` with every new message.
+  // Remembers which server-side conversation a panel is using, so it survives a page reload.
+  // localStorage can be unavailable (private windows, blocked site data), in which case the
+  // panel simply starts a fresh conversation each time the page loads.
+  const conversationIds = {
+    key: (prefix) => `localfoundry.conversation.${prefix}`,
+    load(prefix) {
+      try { return localStorage.getItem(this.key(prefix)); } catch { return null; }
+    },
+    save(prefix, id) {
+      try {
+        if (id) localStorage.setItem(this.key(prefix), id);
+        else localStorage.removeItem(this.key(prefix));
+      } catch { /* not persisted; the conversation still works until the page reloads */ }
+    },
+  };
+
+  async function createConversation() {
+    const res = await fetch('/api/conversations', { method: 'POST' });
+    if (!res.ok) throw new Error(`Error ${res.status}: ${await readProblemDetail(res)}`);
+    return (await res.json()).id;
+  }
+
+  // Wires one card as a multi-turn conversation kept on the server: the page sends only the
+  // new message plus a conversation id, and reloads the transcript from the server on startup.
   function wireConversation({ prefix, send }) {
     const button = $(`${prefix}-send`);
     const reset = $(`${prefix}-reset`);
     const input = $(`${prefix}-input`);
     const output = $(`${prefix}-output`);
-    let history = [];
+    let conversationId = conversationIds.load(prefix);
 
-    reset.addEventListener('click', () => {
-      history = [];
+    function showEmpty() {
       output.replaceChildren();
       setOutput(output, 'Conversation will appear here.', false);
       output.classList.add('empty');
+    }
+
+    function forget() {
+      conversationId = null;
+      conversationIds.save(prefix, null);
+    }
+
+    // Restores the transcript after a reload. A 404 means the server no longer has it
+    // (expired, or the app restarted), so the panel quietly starts over.
+    async function restore() {
+      if (!conversationId) return;
+      try {
+        const res = await fetch(`/api/conversations/${conversationId}`);
+        if (!res.ok) { forget(); return; }
+        const { turns } = await res.json();
+        if (!turns.length) return;
+        output.replaceChildren();
+        for (const turn of turns) appendMessage(output, turn.role, turn.content, false);
+      } catch { /* server unreachable: leave the panel empty and keep the id for next time */ }
+    }
+
+    reset.addEventListener('click', () => {
+      // Best effort: the server also expires idle conversations, so a failed delete is harmless.
+      if (conversationId) fetch(`/api/conversations/${conversationId}`, { method: 'DELETE' }).catch(() => {});
+      forget();
+      showEmpty();
     });
 
     button.addEventListener('click', async () => {
       const message = input.value.trim();
       if (!message) return;
 
-      if (!history.length) output.replaceChildren();
+      if (output.classList.contains('empty')) output.replaceChildren();
       button.disabled = reset.disabled = true;
       appendMessage(output, 'user', message, false);
       const replyBody = appendMessage(output, 'assistant', '…', false);
 
       try {
-        const reply = await send({ message, history, ...selectedModel() }, (partial) => {
+        if (!conversationId) {
+          conversationId = await createConversation();
+          conversationIds.save(prefix, conversationId);
+        }
+
+        const reply = await send({ message, conversationId, ...selectedModel() }, (partial) => {
           replyBody.textContent = partial;
           output.scrollTop = output.scrollHeight;
         });
         replyBody.textContent = reply || '(empty response)';
-
-        // Only completed exchanges join the history; a failed turn can simply be retried.
-        history.push({ role: 'user', content: message }, { role: 'assistant', content: reply });
         input.value = '';
       } catch (err) {
+        // The server records only completed exchanges, so a failed turn can simply be retried.
+        // If the conversation itself is gone, drop the id so the retry starts a new one.
+        if (err.message.startsWith('Error 404')) forget();
         replyBody.parentElement.remove();
         appendMessage(output, 'assistant', err.message, true);
       } finally {
         button.disabled = reset.disabled = false;
       }
     });
+
+    restore();
   }
 
   wireConversation({ prefix: 'chat', send: (body) => requestReply('/api/chat', body) });

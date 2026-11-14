@@ -1,3 +1,4 @@
+using LocalFoundry.Api.Conversations;
 using LocalFoundry.Api.Models;
 using LocalFoundry.Api.Validation;
 using LocalFoundry.Api.Services;
@@ -20,6 +21,7 @@ public static class AgentEndpoints
             .AddEndpointFilter<ChatRequestValidationFilter>()
             .WithTags("Agent")
             .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesFoundryLocalProblems();
         agent.WithRequestTimeout(ModelRequestTimeout.PolicyName);
 
@@ -35,17 +37,46 @@ public static class AgentEndpoints
         return app;
     }
 
-    private static async Task<IResult> AskAgentAsync(ChatRequest request, IAgentService agent, CancellationToken ct)
+    private static async Task<IResult> AskAgentAsync(
+        ChatRequest request, IAgentService agent, IConversationStore conversations, CancellationToken ct)
     {
-        var reply = await agent.AskAsync(request.ToChatMessages(), request.Model, ct);
-        return Results.Ok(new ChatReply(reply));
+        if (ConversationSession.Begin(request, conversations) is not { } session)
+        {
+            return ConversationProblems.NotFound(request.ConversationId!);
+        }
+
+        var reply = await agent.AskAsync(session.Messages, request.Model, ct);
+        session.Complete(reply);
+
+        return Results.Ok(new ChatReply(reply, session.ConversationId));
     }
 
-    private static Task StreamAgentAsync(
-        ChatRequest request, IAgentService agent, HttpResponse httpResponse, ILoggerFactory loggerFactory, CancellationToken ct) =>
-        ReplyEventStream.WriteAsync(
-            agent.AskStreamingAsync(request.ToChatMessages(), request.Model, ct),
+    private static async Task<IResult> StreamAgentAsync(
+        ChatRequest request,
+        IAgentService agent,
+        IConversationStore conversations,
+        HttpResponse httpResponse,
+        ILoggerFactory loggerFactory,
+        CancellationToken ct)
+    {
+        if (ConversationSession.Begin(request, conversations) is not { } session)
+        {
+            return ConversationProblems.NotFound(request.ConversationId!);
+        }
+
+        var reply = await ReplyEventStream.WriteAsync(
+            agent.AskStreamingAsync(session.Messages, request.Model, ct),
             httpResponse,
             loggerFactory.CreateLogger(typeof(AgentEndpoints)),
             ct);
+
+        // null means the stream failed or the client left: don't record a partial reply.
+        if (reply is not null)
+        {
+            session.Complete(reply);
+        }
+
+        // The event stream has already been written to the response.
+        return Results.Empty;
+    }
 }

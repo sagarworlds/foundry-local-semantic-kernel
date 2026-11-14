@@ -59,6 +59,10 @@ HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
 },
 "Agent": {
   "SystemPrompt": "You are a helpful assistant. Use tools when they help answer the question."
+},
+"Conversations": {
+  "MaxConversations": 200,
+  "IdleTimeoutMinutes": 120
 }
 ```
 
@@ -66,6 +70,7 @@ HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
 - `ApiKey` is required by the OpenAI connector's API shape but ignored by Foundry Local.
 - `RequestTimeoutSeconds` is how long to wait for Foundry Local before returning `504`. For `/api/chat/stream` it only covers the wait for the first token.
 
+- `Conversations:MaxConversations` / `IdleTimeoutMinutes` bound the in-memory conversation store (see [Server-side conversations](#server-side-conversations)).
 - `Agent:SystemPrompt` is the instruction placed ahead of every `/api/agent` conversation.
 
 The settings are validated at startup: the app refuses to start, naming the bad setting, if `Endpoint` isn't an http(s) URL, `ModelId`/`ApiKey`/`SystemPrompt` is empty or the timeout isn't positive.
@@ -91,6 +96,9 @@ Open **http://localhost:5189/** — it serves a plain HTML+JS test console (`www
 | GET | `/api/info` | Service info (JSON) |
 | GET | `/openapi/v1.json` | OpenAPI description of the endpoints below |
 | GET | `/health` | `Healthy` (200) if Foundry Local is reachable and the configured model is loaded, `Degraded` (200) if the model isn't loaded, `Unhealthy` (503) if unreachable; JSON body gives the reason |
+| POST | `/api/conversations` | Starts a server-side conversation and returns its id |
+| GET | `/api/conversations/{id}` | Returns a conversation's transcript |
+| DELETE | `/api/conversations/{id}` | Deletes a conversation |
 | POST | `/api/chat` | Plain chat via `IChatClient` (Microsoft.Extensions.AI) |
 | POST | `/api/chat/stream` | Streaming variant of the above, as Server-Sent Events |
 | POST | `/api/agent` | Semantic Kernel chat with function-calling enabled (current time and arithmetic tools) |
@@ -148,7 +156,32 @@ curl -X POST http://localhost:5189/api/chat \
   -d '{"message":"What is the capital of France?","model":"phi-4-mini"}'
 ```
 
-The browser test console has a **Model** dropdown filled from the catalog, and keeps conversations for you: each panel keeps its transcript until you click **New conversation**.
+The browser test console has a **Model** dropdown filled from the catalog.
+
+### Server-side conversations
+
+Instead of resending `history`, you can let the server keep the transcript:
+
+```bash
+# 1. Create a conversation; the response is {"id":"<conversation id>"}
+curl -X POST http://localhost:5189/api/conversations
+
+# 2. Send only the new message plus the id, as many times as you like
+curl -X POST http://localhost:5189/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"What is the capital of France?","conversationId":"<conversation id>"}'
+
+# 3. Read the transcript back, or delete it
+curl http://localhost:5189/api/conversations/<conversation id>
+curl -X DELETE http://localhost:5189/api/conversations/<conversation id>
+```
+
+- One conversation can be used across the chat, streaming and agent endpoints.
+- An exchange is recorded only when the model replied in full, so a failed request can simply be retried.
+- Conversations are kept **in memory**: they survive a page reload but not an app restart. They are also discarded after `Conversations:IdleTimeoutMinutes` (default 120) without use, or when more than `Conversations:MaxConversations` (default 200) exist (least recently used first). Only the most recent 50 turns are kept.
+- An unknown or expired id returns `404`. Sending both `conversationId` and `history` returns `400`.
+
+The browser test console uses this: each panel remembers its conversation id in the browser, so the transcript is still there after a reload, until you click **New conversation**.
 
 ## Validation and error responses
 
@@ -156,6 +189,7 @@ Chat and agent requests are validated before reaching the model, otherwise the A
 
 - `message` must be present, non-blank and at most 8000 characters.
 - `model` is optional; if given it must be 1-100 characters of letters, digits, `.`, `-`, `_` or `:`.
+- `conversationId` is optional; it can't be combined with `history`.
 - `history` is optional, at most 50 turns. Each turn needs a `role` of `user` or `assistant` (`system` is rejected so callers can't override the agent's instructions) and non-blank `content` of at most 8000 characters.
 
 Failures are handled centrally by `FoundryLocalExceptionHandler`, which logs them and returns [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457):
@@ -163,6 +197,7 @@ Failures are handled centrally by `FoundryLocalExceptionHandler`, which logs the
 | Status | When |
 |---|---|
 | `400` | Invalid request body (see above) |
+| `404` | The `conversationId` doesn't exist or has expired |
 | `502` | Foundry Local responded with an error — typically the configured `ModelId` isn't loaded |
 | `503` | Foundry Local couldn't be reached — daemon not running, or on a different port than `Endpoint` |
 | `504` | Foundry Local didn't answer within `RequestTimeoutSeconds` |
@@ -203,9 +238,10 @@ LocalFoundry.Api/
   Endpoints/                                 One class per endpoint group (info, health, chat, agent, models)
   Health/FoundryLocalHealthCheck.cs          Probes Foundry Local's /models endpoint for GET /health
   Timeouts/ModelRequestTimeout.cs            504 timeout policy for endpoints that call the model
+  Conversations/                             Server-side transcripts: IConversationStore (+ in-memory store) and ConversationSession
   ErrorHandling/                             Maps Foundry Local failures to 502/503 ProblemDetails
   Validation/                                ChatRequest validator + endpoint filter
-  Options/                                   FoundryLocal (endpoint, model, timeout) and Agent (system prompt) settings + validation
+  Options/                                   FoundryLocal, Agent and Conversations settings + validation
   Plugins/                                   Tools the agent can call: TimePlugin (current time), MathPlugin (arithmetic)
   Models/ChatDtos.cs                         Request/response records
   Services/IKernelProvider.cs                Builds the Semantic Kernel for a given model (+ FoundryLocalKernelProvider)

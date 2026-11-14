@@ -126,4 +126,36 @@ public class ChatRequestValidatorTests
 
         Assert.Contains(nameof(ChatRequest.Model), ChatRequestValidator.Validate(new ChatRequest("hi", Model: model)).Keys);
     }
+
+    [Fact]
+    public void Validate_ConversationIdAlone_ReturnsNoErrors()
+    {
+        Assert.Empty(ChatRequestValidator.Validate(new ChatRequest("hi", ConversationId: "0123456789abcdef0123456789abcdef")));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("has space")]
+    [InlineData("../other")]
+    public void Validate_MalformedConversationId_ReturnsConversationIdError(string conversationId)
+    {
+        var errors = ChatRequestValidator.Validate(new ChatRequest("hi", ConversationId: conversationId));
+
+        Assert.Contains(nameof(ChatRequest.ConversationId), errors.Keys);
+    }
+
+    [Fact]
+    public void Validate_ConversationIdTogetherWithHistory_IsRejectedAsAmbiguous()
+    {
+        var request = new ChatRequest("hi", [new ChatTurn("user", "earlier")], ConversationId: "abc123");
+
+        var error = Assert.Single(ChatRequestValidator.Validate(request)[nameof(ChatRequest.ConversationId)]);
+        Assert.Contains("not both", error);
+    }
+
+    [Fact]
+    public void Validate_ConversationIdWithEmptyHistory_ReturnsNoErrors()
+    {
+        Assert.Empty(ChatRequestValidator.Validate(new ChatRequest("hi", [], ConversationId: "abc123")));
+    }
 }

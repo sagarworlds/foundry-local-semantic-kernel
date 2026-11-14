@@ -16,6 +16,9 @@ public static class InfoEndpoints
             {
                 "GET /health",
                 "GET /openapi/v1.json",
+                "POST /api/conversations",
+                "GET /api/conversations/{id}",
+                "DELETE /api/conversations/{id}",
                 "POST /api/chat",
                 "POST /api/chat/stream",
                 "POST /api/agent",

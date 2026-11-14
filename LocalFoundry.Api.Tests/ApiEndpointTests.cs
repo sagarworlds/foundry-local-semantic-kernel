@@ -43,7 +43,7 @@ public sealed class ApiEndpointTests : IDisposable
         using var document = System.Text.Json.JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
         var paths = document.RootElement.GetProperty("paths");
 
-        foreach (var path in new[] { "/api/info", "/api/chat", "/api/chat/stream", "/api/agent", "/api/agent/stream", "/api/foundry/models" })
+        foreach (var path in new[] { "/api/info", "/api/conversations", "/api/conversations/{id}", "/api/chat", "/api/chat/stream", "/api/agent", "/api/agent/stream", "/api/foundry/models" })
         {
             Assert.True(paths.TryGetProperty(path, out _), $"OpenAPI document is missing {path}");
         }

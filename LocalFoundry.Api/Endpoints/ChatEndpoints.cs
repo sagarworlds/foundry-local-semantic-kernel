@@ -1,3 +1,4 @@
+using LocalFoundry.Api.Conversations;
 using LocalFoundry.Api.Models;
 using LocalFoundry.Api.Timeouts;
 using LocalFoundry.Api.Validation;
@@ -21,6 +22,7 @@ public static class ChatEndpoints
             .AddEndpointFilter<ChatRequestValidationFilter>()
             .WithTags("Chat")
             .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesFoundryLocalProblems();
         chat.WithRequestTimeout(ModelRequestTimeout.PolicyName);
 
@@ -36,20 +38,48 @@ public static class ChatEndpoints
         return app;
     }
 
-    private static async Task<IResult> ChatAsync(ChatRequest request, IChatClient chatClient, CancellationToken ct)
+    private static async Task<IResult> ChatAsync(
+        ChatRequest request, IChatClient chatClient, IConversationStore conversations, CancellationToken ct)
     {
-        var response = await chatClient.GetResponseAsync(request.ToChatMessages(), request.ToChatOptions(), ct);
+        if (ConversationSession.Begin(request, conversations) is not { } session)
+        {
+            return ConversationProblems.NotFound(request.ConversationId!);
+        }
 
-        return Results.Ok(new ChatReply(response.Text));
+        var response = await chatClient.GetResponseAsync(session.Messages, request.ToChatOptions(), ct);
+        session.Complete(response.Text);
+
+        return Results.Ok(new ChatReply(response.Text, session.ConversationId));
     }
 
-    private static Task StreamChatAsync(
-        ChatRequest request, IChatClient chatClient, HttpResponse httpResponse, ILoggerFactory loggerFactory, CancellationToken ct) =>
-        ReplyEventStream.WriteAsync(
-            TextFragmentsAsync(chatClient.GetStreamingResponseAsync(request.ToChatMessages(), request.ToChatOptions(), ct)),
+    private static async Task<IResult> StreamChatAsync(
+        ChatRequest request,
+        IChatClient chatClient,
+        IConversationStore conversations,
+        HttpResponse httpResponse,
+        ILoggerFactory loggerFactory,
+        CancellationToken ct)
+    {
+        if (ConversationSession.Begin(request, conversations) is not { } session)
+        {
+            return ConversationProblems.NotFound(request.ConversationId!);
+        }
+
+        var reply = await ReplyEventStream.WriteAsync(
+            TextFragmentsAsync(chatClient.GetStreamingResponseAsync(session.Messages, request.ToChatOptions(), ct)),
             httpResponse,
             loggerFactory.CreateLogger(typeof(ChatEndpoints)),
             ct);
+
+        // null means the stream failed or the client left: don't record a partial reply.
+        if (reply is not null)
+        {
+            session.Complete(reply);
+        }
+
+        // The event stream has already been written to the response.
+        return Results.Empty;
+    }
 
     // Updates carrying only metadata (role, usage) have no text worth sending.
     private static async IAsyncEnumerable<string> TextFragmentsAsync(IAsyncEnumerable<ChatResponseUpdate> updates)

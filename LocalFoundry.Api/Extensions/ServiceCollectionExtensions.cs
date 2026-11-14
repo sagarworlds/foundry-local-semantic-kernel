@@ -1,3 +1,4 @@
+using LocalFoundry.Api.Conversations;
 using LocalFoundry.Api.Health;
 using LocalFoundry.Api.Options;
 using LocalFoundry.Api.Plugins;
@@ -20,7 +21,7 @@ public static class ServiceCollectionExtensions
     /// the agent service, the Foundry Local catalog service and the model-call timeout policy.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
-    /// <param name="configuration">Configuration containing the <c>FoundryLocal</c> and <c>Agent</c> sections.</param>
+    /// <param name="configuration">Configuration containing the <c>FoundryLocal</c>, <c>Agent</c> and <c>Conversations</c> sections.</param>
     /// <returns>The same service collection, for chaining.</returns>
     public static IServiceCollection AddLocalFoundryAi(this IServiceCollection services, IConfiguration configuration)
     {
@@ -33,6 +34,12 @@ public static class ServiceCollectionExtensions
             .Bind(configuration.GetSection(AgentOptions.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        services.AddOptions<ConversationOptions>()
+            .Bind(configuration.GetSection(ConversationOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton<IConversationStore, InMemoryConversationStore>();
 
         services.AddRequestTimeouts();
         services.AddSingleton<IConfigureOptions<RequestTimeoutOptions>, ModelRequestTimeout>();

@@ -8,15 +8,16 @@ namespace LocalFoundry.Api.Models;
 public static class ChatRequestExtensions
 {
     /// <summary>
-    /// Builds the message list for the model: the request's history in order, followed by the new message.
+    /// Builds the message list for the model: the earlier turns in order, followed by the request's new message.
     /// </summary>
     /// <param name="request">A request that has already passed validation.</param>
+    /// <param name="earlierTurns">The turns that precede the new message, oldest first; <see langword="null"/> for none.</param>
     /// <returns>The conversation, oldest message first.</returns>
-    public static IList<ChatMessage> ToChatMessages(this ChatRequest request)
+    public static IList<ChatMessage> ToChatMessages(this ChatRequest request, IReadOnlyList<ChatTurn>? earlierTurns)
     {
-        var messages = new List<ChatMessage>((request.History?.Count ?? 0) + 1);
+        var messages = new List<ChatMessage>((earlierTurns?.Count ?? 0) + 1);
 
-        foreach (var turn in request.History ?? [])
+        foreach (var turn in earlierTurns ?? [])
         {
             messages.Add(new ChatMessage(ToChatRole(turn.Role), turn.Content));
         }

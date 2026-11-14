@@ -67,6 +67,34 @@ public sealed class ApiEndpointTests : IDisposable
         Assert.Equal(new Uri("http://localhost:5273/v1/models"), Assert.Single(_factory.FoundryLocalHttp.RequestedUris));
     }
 
+    [Theory]
+    [InlineData("""{"data":[]}""", "loaded: none")]
+    [InlineData("""{"data":[{"id":"phi-4-mini-instruct-generic-cpu:1"}]}""", "loaded: phi-4-mini-instruct-generic-cpu:1")]
+    public async Task Health_ConfiguredModelNotLoaded_Returns200Degraded(string modelList, string expectedInDescription)
+    {
+        _factory.FoundryLocalHttp.Body = modelList;
+
+        var response = await _client.GetAsync("/health");
+
+        // Still 200: the runtime is up, so the API can serve requests that name a loaded model.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var report = await response.Content.ReadFromJsonAsync<HealthReportDto>();
+        Assert.Equal("Degraded", report!.Status);
+        var description = Assert.Single(report.Checks).Description;
+        Assert.Contains("foundry model load qwen2.5-0.5b", description);
+        Assert.Contains(expectedInDescription, description);
+    }
+
+    [Fact]
+    public async Task Health_EndpointIsNotAnOpenAiApi_Returns503()
+    {
+        _factory.FoundryLocalHttp.Body = "<html>some other server</html>";
+
+        var response = await _client.GetAsync("/health");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
     [Fact]
     public async Task Health_FoundryLocalUnreachable_Returns503WithReason()
     {

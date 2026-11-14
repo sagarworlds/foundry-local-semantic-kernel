@@ -15,6 +15,7 @@
     --accent: #4f8cff;
     --accent-hover: #6fa1ff;
     --ok: #3ddc97;
+    --warn: #f5b942;
     --err: #ff6b6b;
   }
   * { box-sizing: border-box; }
@@ -52,6 +53,7 @@
     font-size: 0.8rem;
   }
   .badge.ok { color: var(--ok); border-color: var(--ok); }
+  .badge.warn { color: var(--warn); border-color: var(--warn); }
   .badge.err { color: var(--err); border-color: var(--err); }
   .badge.pending { color: var(--muted); }
   .grid {
@@ -434,10 +436,12 @@
     const badge = $('foundry-badge');
     try {
       const report = await (await fetch('/health')).json();
-      const healthy = report.status === 'Healthy';
-      badge.textContent = `Foundry Local: ${healthy ? 'reachable' : 'unreachable'}`;
+      // Healthy: reachable and the configured model is loaded. Degraded: reachable, model not loaded.
+      const labels = { Healthy: 'ready', Degraded: 'model not loaded', Unhealthy: 'unreachable' };
+      const styles = { Healthy: 'ok', Degraded: 'warn', Unhealthy: 'err' };
+      badge.textContent = `Foundry Local: ${labels[report.status] ?? report.status}`;
       badge.title = report.checks.map((check) => check.description).join(' ');
-      badge.className = `badge ${healthy ? 'ok' : 'err'}`;
+      badge.className = `badge ${styles[report.status] ?? 'err'}`;
     } catch (err) {
       badge.textContent = 'Foundry Local: unknown';
       badge.title = err.message;

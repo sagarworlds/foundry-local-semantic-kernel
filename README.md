@@ -90,7 +90,7 @@ Open **http://localhost:5189/** — it serves a plain HTML+JS test console (`www
 | GET | `/` | HTML test console (`wwwroot/index.html`) |
 | GET | `/api/info` | Service info (JSON) |
 | GET | `/openapi/v1.json` | OpenAPI description of the endpoints below |
-| GET | `/health` | `200` if Foundry Local's endpoint is reachable, `503` if not, with a JSON reason |
+| GET | `/health` | `Healthy` (200) if Foundry Local is reachable and the configured model is loaded, `Degraded` (200) if the model isn't loaded, `Unhealthy` (503) if unreachable; JSON body gives the reason |
 | POST | `/api/chat` | Plain chat via `IChatClient` (Microsoft.Extensions.AI) |
 | POST | `/api/chat/stream` | Streaming variant of the above, as Server-Sent Events |
 | POST | `/api/agent` | Semantic Kernel chat with function-calling enabled (`TimePlugin`) |

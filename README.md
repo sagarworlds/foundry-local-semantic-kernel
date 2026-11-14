@@ -94,6 +94,7 @@ Open **http://localhost:5189/** — it serves a plain HTML+JS test console (`www
 | POST | `/api/chat` | Plain chat via `IChatClient` (Microsoft.Extensions.AI) |
 | POST | `/api/chat/stream` | Streaming variant of the above, as Server-Sent Events |
 | POST | `/api/agent` | Semantic Kernel chat with function-calling enabled (`TimePlugin`) |
+| POST | `/api/agent/stream` | Streaming variant of the agent endpoint, as Server-Sent Events |
 | GET | `/api/foundry/models` | Lists the local Foundry model catalog via the native SDK |
 
 Example requests:
@@ -156,7 +157,7 @@ Failures are handled centrally by `FoundryLocalExceptionHandler`, which logs the
 | `504` | Foundry Local didn't answer within `RequestTimeoutSeconds` |
 | `500` | Any other, unexpected error (a bug in this app — check the logs) |
 
-`/api/chat/stream` responds with `text/event-stream`. Errors that occur before the first token get the status codes above. After that the status is already `200`, so the outcome is reported in the stream itself:
+`/api/chat/stream` and `/api/agent/stream` respond with `text/event-stream`. Errors that occur before the first token get the status codes above. After that the status is already `200`, so the outcome is reported in the stream itself:
 
 ```
 event: token

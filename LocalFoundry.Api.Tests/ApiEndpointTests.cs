@@ -43,7 +43,7 @@ public sealed class ApiEndpointTests : IDisposable
         using var document = System.Text.Json.JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
         var paths = document.RootElement.GetProperty("paths");
 
-        foreach (var path in new[] { "/api/info", "/api/chat", "/api/chat/stream", "/api/agent", "/api/foundry/models" })
+        foreach (var path in new[] { "/api/info", "/api/chat", "/api/chat/stream", "/api/agent", "/api/agent/stream", "/api/foundry/models" })
         {
             Assert.True(paths.TryGetProperty(path, out _), $"OpenAPI document is missing {path}");
         }
@@ -321,6 +321,40 @@ public sealed class ApiEndpointTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var reply = await response.Content.ReadFromJsonAsync<ChatReply>();
         Assert.Equal("It is noon.", reply!.Reply);
+    }
+
+    [Fact]
+    public async Task AgentStream_ValidMessage_SendsTokenEventsThenDone()
+    {
+        var request = new ChatRequest("What time is it?", [new ChatTurn("user", "hi"), new ChatTurn("assistant", "hello")], "phi-4-mini");
+
+        var response = await _client.PostAsJsonAsync("/api/agent/stream", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/event-stream", response.Content.Headers.ContentType!.MediaType);
+        var events = SseEvent.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("done", events[^1].Name);
+        Assert.Equal("It is noon. ", string.Concat(events.Where(e => e.Name == "token").Select(e => e.Read<ChatStreamToken>().Text)));
+        Assert.Equal(3, _factory.Agent.LastMessages.Count);
+        Assert.Equal("phi-4-mini", _factory.Agent.LastModelId);
+    }
+
+    [Fact]
+    public async Task AgentStream_FoundryLocalUnreachable_Returns503Problem()
+    {
+        _factory.Agent.ExceptionToThrow = new HttpRequestException("Connection refused");
+
+        var response = await _client.PostAsJsonAsync("/api/agent/stream", new ChatRequest("hi"));
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AgentStream_BlankMessage_Returns400()
+    {
+        var response = await _client.PostAsJsonAsync("/api/agent/stream", new ChatRequest(" "));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

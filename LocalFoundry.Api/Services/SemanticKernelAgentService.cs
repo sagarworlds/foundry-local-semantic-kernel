@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using LocalFoundry.Api.Options;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
@@ -30,6 +31,32 @@ public sealed class SemanticKernelAgentService : IAgentService
     {
         var kernel = _kernelProvider.GetKernel(modelId);
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
+
+        var result = await chatCompletionService.GetChatMessageContentAsync(
+            BuildHistory(messages), ToolCallingSettings(), kernel, cancellationToken);
+        return result.Content ?? string.Empty;
+    }
+
+    /// <inheritdoc />
+    public async IAsyncEnumerable<string> AskStreamingAsync(
+        IEnumerable<ChatMessage> messages, string? modelId, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var kernel = _kernelProvider.GetKernel(modelId);
+        var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
+
+        await foreach (var update in chatCompletionService.GetStreamingChatMessageContentsAsync(
+            BuildHistory(messages), ToolCallingSettings(), kernel, cancellationToken))
+        {
+            // Updates that only carry a tool call or metadata have no reply text.
+            if (!string.IsNullOrEmpty(update.Content))
+            {
+                yield return update.Content;
+            }
+        }
+    }
+
+    private ChatHistory BuildHistory(IEnumerable<ChatMessage> messages)
+    {
         var history = new ChatHistory(_options.SystemPrompt);
 
         foreach (var message in messages)
@@ -37,14 +64,12 @@ public sealed class SemanticKernelAgentService : IAgentService
             history.AddMessage(ToAuthorRole(message.Role), message.Text);
         }
 
-        var settings = new OpenAIPromptExecutionSettings
-        {
-            FunctionChoiceBehavior = FunctionChoiceBehavior.Auto(),
-        };
-
-        var result = await chatCompletionService.GetChatMessageContentAsync(history, settings, kernel, cancellationToken);
-        return result.Content ?? string.Empty;
+        return history;
     }
+
+    // Auto lets the model decide when to call a plugin function; SK runs it and feeds the result back.
+    private static OpenAIPromptExecutionSettings ToolCallingSettings() =>
+        new() { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
 
     // Only user and assistant turns are accepted from callers; the system prompt is added above.
     private static AuthorRole ToAuthorRole(ChatRole role) =>

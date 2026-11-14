@@ -176,7 +176,7 @@
 
   <div class="card">
     <h2>Agent &mdash; Semantic Kernel</h2>
-    <p class="desc">POST /api/agent &mdash; function-calling enabled (TimePlugin).</p>
+    <p class="desc">POST /api/agent/stream &mdash; function-calling enabled, reply streamed.</p>
     <div id="agent-output" class="output empty">Conversation will appear here.</div>
     <textarea id="agent-input">What time is it right now?</textarea>
     <div class="actions">
@@ -360,7 +360,7 @@
   }
 
   wireConversation({ prefix: 'chat', send: (body) => requestReply('/api/chat', body) });
-  wireConversation({ prefix: 'agent', send: (body) => requestReply('/api/agent', body) });
+  wireConversation({ prefix: 'agent', send: (body, onText) => requestStreamedReply('/api/agent/stream', body, onText) });
   wireConversation({ prefix: 'stream', send: (body, onText) => requestStreamedReply('/api/chat/stream', body, onText) });
 
   // Built with DOM nodes and textContent (not innerHTML) so model names are never parsed as markup.

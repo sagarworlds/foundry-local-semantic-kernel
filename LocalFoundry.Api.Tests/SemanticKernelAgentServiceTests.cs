@@ -71,4 +71,36 @@ public class SemanticKernelAgentServiceTests
 
         Assert.Equal(string.Empty, reply);
     }
+
+    [Fact]
+    public async Task AskStreamingAsync_YieldsReplyTextWithSystemPromptToolCallingAndModelApplied()
+    {
+        _kernels.ChatService.Reply = "It is noon.";
+
+        var reply = "";
+        await foreach (var fragment in _agent.AskStreamingAsync([new ChatMessage(ChatRole.User, "hi")], "phi-4-mini", CancellationToken.None))
+        {
+            reply += fragment;
+        }
+
+        Assert.Equal("It is noon.", reply);
+        Assert.Equal(["phi-4-mini"], _kernels.RequestedModels);
+        Assert.Equal(AuthorRole.System, _kernels.ChatService.LastHistory![0].Role);
+        Assert.Same(_kernels.Kernel, _kernels.ChatService.LastKernel);
+        Assert.IsType<AutoFunctionChoiceBehavior>(_kernels.ChatService.LastSettings!.FunctionChoiceBehavior);
+    }
+
+    [Fact]
+    public async Task AskStreamingAsync_ModelReturnsNoText_YieldsNothing()
+    {
+        _kernels.ChatService.Reply = null;
+
+        var fragments = new List<string>();
+        await foreach (var fragment in _agent.AskStreamingAsync([new ChatMessage(ChatRole.User, "hi")], null, CancellationToken.None))
+        {
+            fragments.Add(fragment);
+        }
+
+        Assert.Empty(fragments);
+    }
 }

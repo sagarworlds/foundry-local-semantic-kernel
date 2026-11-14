@@ -19,6 +19,7 @@ public static class InfoEndpoints
                 "POST /api/chat",
                 "POST /api/chat/stream",
                 "POST /api/agent",
+                "POST /api/agent/stream",
                 "GET /api/foundry/models",
             },
         }))

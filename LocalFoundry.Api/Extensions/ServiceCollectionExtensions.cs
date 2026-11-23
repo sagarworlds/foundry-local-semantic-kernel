@@ -1,10 +1,13 @@
+using LocalFoundry.Api.Conversations;
 using LocalFoundry.Api.Health;
 using LocalFoundry.Api.Options;
+using LocalFoundry.Api.Plugins;
 using LocalFoundry.Api.Services;
 using LocalFoundry.Api.Timeouts;
 using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
+using Microsoft.SemanticKernel;
 
 namespace LocalFoundry.Api.Extensions;
 
@@ -18,7 +21,7 @@ public static class ServiceCollectionExtensions
     /// the agent service, the Foundry Local catalog service and the model-call timeout policy.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
-    /// <param name="configuration">Configuration containing the <c>FoundryLocal</c> and <c>Agent</c> sections.</param>
+    /// <param name="configuration">Configuration containing the <c>FoundryLocal</c>, <c>Agent</c> and <c>Conversations</c> sections.</param>
     /// <returns>The same service collection, for chaining.</returns>
     public static IServiceCollection AddLocalFoundryAi(this IServiceCollection services, IConfiguration configuration)
     {
@@ -31,6 +34,12 @@ public static class ServiceCollectionExtensions
             .Bind(configuration.GetSection(AgentOptions.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        services.AddOptions<ConversationOptions>()
+            .Bind(configuration.GetSection(ConversationOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton<IConversationStore, InMemoryConversationStore>();
 
         services.AddRequestTimeouts();
         services.AddSingleton<IConfigureOptions<RequestTimeoutOptions>, ModelRequestTimeout>();
@@ -45,6 +54,7 @@ public static class ServiceCollectionExtensions
         // Semantic Kernel: orchestration layer, pointed at Foundry Local's OpenAI-compatible
         // endpoint (run `foundry server start --port 5273` first - see README).
         services.AddSingleton(TimeProvider.System);
+        services.AddAgentPlugins();
         services.AddSingleton<IKernelProvider, FoundryLocalKernelProvider>();
 
         // Microsoft.Extensions.AI: the framework-neutral abstraction endpoint code depends on.
@@ -54,5 +64,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IModelCatalogService, FoundryLocalCatalogService>();
 
         return services;
+    }
+
+    // The tools the agent may call. To add one, write a plugin class and register it here;
+    // the kernel provider picks up every registered KernelPlugin.
+    private static void AddAgentPlugins(this IServiceCollection services)
+    {
+        services.AddSingleton(sp =>
+            KernelPluginFactory.CreateFromObject(new TimePlugin(sp.GetRequiredService<TimeProvider>()), nameof(TimePlugin)));
+        services.AddSingleton(_ => KernelPluginFactory.CreateFromObject(new MathPlugin(), nameof(MathPlugin)));
     }
 }

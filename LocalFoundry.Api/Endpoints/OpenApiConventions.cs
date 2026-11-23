@@ -16,4 +16,12 @@ internal static class OpenApiConventions
             new ProducesResponseTypeMetadata(StatusCodes.Status504GatewayTimeout, typeof(Microsoft.AspNetCore.Mvc.ProblemDetails), ["application/problem+json"]));
         return builder;
     }
+
+    /// <summary>Documents a Server-Sent Events reply stream (see <see cref="ReplyEventStream"/>).</summary>
+    public static RouteHandlerBuilder ProducesReplyEventStream(this RouteHandlerBuilder builder) =>
+        builder
+            .WithDescription(
+                "Emits 'token' events with {\"text\"} as the reply is generated, then a final 'done' event. " +
+                "If the stream fails part-way it ends with an 'error' event carrying {\"status\",\"title\",\"detail\"} instead.")
+            .Produces<string>(StatusCodes.Status200OK, "text/event-stream");
 }

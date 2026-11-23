@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using LocalFoundry.Api.Services;
 using Microsoft.Extensions.AI;
 
@@ -19,5 +20,24 @@ public sealed class FakeAgentService : IAgentService
         LastMessages = messages.ToList();
         LastModelId = modelId;
         return ExceptionToThrow is null ? Task.FromResult(Reply) : Task.FromException<string>(ExceptionToThrow);
+    }
+
+    public async IAsyncEnumerable<string> AskStreamingAsync(
+        IEnumerable<ChatMessage> messages, string? modelId, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        LastMessages = messages.ToList();
+        LastModelId = modelId;
+        await Task.Yield();
+
+        if (ExceptionToThrow is not null)
+        {
+            throw ExceptionToThrow;
+        }
+
+        // Split so the stream has more than one token to assert on.
+        foreach (var word in Reply.Split(' '))
+        {
+            yield return word + " ";
+        }
     }
 }

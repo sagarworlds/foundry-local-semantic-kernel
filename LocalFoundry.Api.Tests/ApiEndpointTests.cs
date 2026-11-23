@@ -43,7 +43,7 @@ public sealed class ApiEndpointTests : IDisposable
         using var document = System.Text.Json.JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
         var paths = document.RootElement.GetProperty("paths");
 
-        foreach (var path in new[] { "/api/info", "/api/chat", "/api/chat/stream", "/api/agent", "/api/foundry/models" })
+        foreach (var path in new[] { "/api/info", "/api/conversations", "/api/conversations/{id}", "/api/chat", "/api/chat/stream", "/api/agent", "/api/agent/stream", "/api/foundry/models" })
         {
             Assert.True(paths.TryGetProperty(path, out _), $"OpenAPI document is missing {path}");
         }
@@ -65,6 +65,34 @@ public sealed class ApiEndpointTests : IDisposable
         Assert.Equal("Healthy", report!.Status);
         Assert.Equal("foundry-local", Assert.Single(report.Checks).Name);
         Assert.Equal(new Uri("http://localhost:5273/v1/models"), Assert.Single(_factory.FoundryLocalHttp.RequestedUris));
+    }
+
+    [Theory]
+    [InlineData("""{"data":[]}""", "loaded: none")]
+    [InlineData("""{"data":[{"id":"phi-4-mini-instruct-generic-cpu:1"}]}""", "loaded: phi-4-mini-instruct-generic-cpu:1")]
+    public async Task Health_ConfiguredModelNotLoaded_Returns200Degraded(string modelList, string expectedInDescription)
+    {
+        _factory.FoundryLocalHttp.Body = modelList;
+
+        var response = await _client.GetAsync("/health");
+
+        // Still 200: the runtime is up, so the API can serve requests that name a loaded model.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var report = await response.Content.ReadFromJsonAsync<HealthReportDto>();
+        Assert.Equal("Degraded", report!.Status);
+        var description = Assert.Single(report.Checks).Description;
+        Assert.Contains("foundry model load qwen2.5-0.5b", description);
+        Assert.Contains(expectedInDescription, description);
+    }
+
+    [Fact]
+    public async Task Health_EndpointIsNotAnOpenAiApi_Returns503()
+    {
+        _factory.FoundryLocalHttp.Body = "<html>some other server</html>";
+
+        var response = await _client.GetAsync("/health");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
     [Fact]
@@ -293,6 +321,40 @@ public sealed class ApiEndpointTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var reply = await response.Content.ReadFromJsonAsync<ChatReply>();
         Assert.Equal("It is noon.", reply!.Reply);
+    }
+
+    [Fact]
+    public async Task AgentStream_ValidMessage_SendsTokenEventsThenDone()
+    {
+        var request = new ChatRequest("What time is it?", [new ChatTurn("user", "hi"), new ChatTurn("assistant", "hello")], "phi-4-mini");
+
+        var response = await _client.PostAsJsonAsync("/api/agent/stream", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/event-stream", response.Content.Headers.ContentType!.MediaType);
+        var events = SseEvent.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("done", events[^1].Name);
+        Assert.Equal("It is noon. ", string.Concat(events.Where(e => e.Name == "token").Select(e => e.Read<ChatStreamToken>().Text)));
+        Assert.Equal(3, _factory.Agent.LastMessages.Count);
+        Assert.Equal("phi-4-mini", _factory.Agent.LastModelId);
+    }
+
+    [Fact]
+    public async Task AgentStream_FoundryLocalUnreachable_Returns503Problem()
+    {
+        _factory.Agent.ExceptionToThrow = new HttpRequestException("Connection refused");
+
+        var response = await _client.PostAsJsonAsync("/api/agent/stream", new ChatRequest("hi"));
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AgentStream_BlankMessage_Returns400()
+    {
+        var response = await _client.PostAsJsonAsync("/api/agent/stream", new ChatRequest(" "));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

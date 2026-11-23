@@ -52,6 +52,20 @@ public static class ChatRequestValidator
             errors[nameof(ChatRequest.History)] = [.. historyErrors];
         }
 
+        if (request?.ConversationId is { } conversationId)
+        {
+            if (!IsValidConversationId(conversationId))
+            {
+                errors[nameof(ChatRequest.ConversationId)] = ["ConversationId must be an id returned by POST /api/conversations."];
+            }
+            // Two sources of earlier turns would be ambiguous: which one wins?
+            else if (request.History is { Count: > 0 })
+            {
+                errors[nameof(ChatRequest.ConversationId)] =
+                    ["Send either ConversationId or History, not both: the server already holds the conversation's history."];
+            }
+        }
+
         // null means "use the configured default"; an explicit value must look like a model alias.
         if (request?.Model is { } model && !IsValidModel(model))
         {
@@ -68,6 +82,15 @@ public static class ChatRequestValidator
     private static bool IsValidModel(string model) =>
         model.Length is > 0 and <= MaxModelLength
         && model.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_' or ':');
+
+    /// <summary>
+    /// Whether <paramref name="id"/> has the shape of a conversation id. Checked before any
+    /// lookup so arbitrary text never reaches the store or a route.
+    /// </summary>
+    /// <param name="id">The candidate id.</param>
+    /// <returns><see langword="true"/> for 1-64 ASCII letters, digits or hyphens.</returns>
+    public static bool IsValidConversationId(string? id) =>
+        id is { Length: > 0 and <= 64 } && id.All(c => char.IsAsciiLetterOrDigit(c) || c == '-');
 
     private static List<string> ValidateHistory(IReadOnlyList<ChatTurn>? history)
     {

@@ -11,7 +11,12 @@ namespace LocalFoundry.Api.Models;
 /// <c>GET /api/foundry/models</c>, loaded with <c>foundry model load</c>). Omit to use the
 /// configured <c>FoundryLocal:ModelId</c>.
 /// </param>
-public sealed record ChatRequest(string Message, IReadOnlyList<ChatTurn>? History = null, string? Model = null);
+/// <param name="ConversationId">
+/// Id of a server-side conversation (from <c>POST /api/conversations</c>). The server then
+/// supplies the earlier turns and records this exchange, so <paramref name="History"/> must be omitted.
+/// </param>
+public sealed record ChatRequest(
+    string Message, IReadOnlyList<ChatTurn>? History = null, string? Model = null, string? ConversationId = null);
 
 /// <summary>One earlier turn of a conversation.</summary>
 /// <param name="Role">Who said it: <c>user</c> or <c>assistant</c>.</param>
@@ -20,7 +25,17 @@ public sealed record ChatTurn(string Role, string Content);
 
 /// <summary>Response body for the non-streaming chat and agent endpoints.</summary>
 /// <param name="Reply">The model's reply text.</param>
-public sealed record ChatReply(string Reply);
+/// <param name="ConversationId">The server-side conversation the exchange was recorded in, if the request named one.</param>
+public sealed record ChatReply(string Reply, string? ConversationId = null);
+
+/// <summary>Response body of <c>POST /api/conversations</c>.</summary>
+/// <param name="Id">The new conversation's id, to send as <c>conversationId</c> in chat and agent requests.</param>
+public sealed record ConversationCreated(string Id);
+
+/// <summary>Response body of <c>GET /api/conversations/{id}</c>.</summary>
+/// <param name="Id">The conversation's id.</param>
+/// <param name="Turns">The recorded turns, oldest first.</param>
+public sealed record ConversationTranscript(string Id, IReadOnlyList<ChatTurn> Turns);
 
 /// <summary>A model available in the local Foundry catalog.</summary>
 /// <param name="Alias">Short alias used with the <c>foundry model</c> CLI commands and as <c>FoundryLocal:ModelId</c>.</param>

@@ -26,7 +26,7 @@ HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
 
 ## Prerequisites
 
-- .NET 9 SDK or later
+- .NET 10 SDK or later
 - [Foundry Local](https://learn.microsoft.com/azure/ai-foundry/foundry-local/get-started) installed:
   ```powershell
   winget install Microsoft.FoundryLocal
@@ -59,6 +59,10 @@ HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
 },
 "Agent": {
   "SystemPrompt": "You are a helpful assistant. Use tools when they help answer the question."
+},
+"Conversations": {
+  "MaxConversations": 200,
+  "IdleTimeoutMinutes": 120
 }
 ```
 
@@ -66,6 +70,7 @@ HTTP request → Minimal API endpoint → IChatClient (Microsoft.Extensions.AI)
 - `ApiKey` is required by the OpenAI connector's API shape but ignored by Foundry Local.
 - `RequestTimeoutSeconds` is how long to wait for Foundry Local before returning `504`. For `/api/chat/stream` it only covers the wait for the first token.
 
+- `Conversations:MaxConversations` / `IdleTimeoutMinutes` bound the in-memory conversation store (see [Server-side conversations](#server-side-conversations)).
 - `Agent:SystemPrompt` is the instruction placed ahead of every `/api/agent` conversation.
 
 The settings are validated at startup: the app refuses to start, naming the bad setting, if `Endpoint` isn't an http(s) URL, `ModelId`/`ApiKey`/`SystemPrompt` is empty or the timeout isn't positive.
@@ -79,6 +84,28 @@ dotnet run
 
 The app starts even if Foundry Local isn't running yet — the chat/agent endpoints will return a `503` with setup instructions until it is.
 
+## Running in Docker
+
+The API can run in a container, but **the model can't**: Foundry Local stays on the host and the container calls it over HTTP.
+
+```bash
+foundry server start --port 5273        # on the host, with a model loaded
+docker compose up --build               # then open http://localhost:5189/
+```
+
+or without Compose:
+
+```bash
+docker build -t localfoundry-api .
+docker run --rm -p 5189:8080 --add-host=host.docker.internal:host-gateway localfoundry-api
+```
+
+- The image sets `FoundryLocal__Endpoint=http://host.docker.internal:5273/v1`. Override any setting with an environment variable, using `__` for `:` (for example `-e FoundryLocal__ModelId=phi-4-mini`).
+- **Docker Desktop (Windows/macOS):** `host.docker.internal` reaches Foundry Local on the host as is.
+- **Linux:** Foundry Local listens only on `127.0.0.1`, which a container on the default bridge network can't reach. Use host networking instead: `docker run --rm --network host -e FoundryLocal__Endpoint=http://localhost:5273/v1 localfoundry-api` (the API is then on port 8080).
+- The container listens on port 8080 and runs as a non-root user. `GET /health` tells you whether it can reach Foundry Local.
+- The image leaves out the SDK's GPU (CUDA) libraries, since no inference happens in the container.
+
 ## Try it in a browser
 
 Open **http://localhost:5189/** — it serves a plain HTML+JS test console (`wwwroot/index.html`) with a panel for each endpoint (chat, streaming chat, agent, model catalog) plus live status badges. It calls the API on the same origin, so no CORS setup is needed. This is the fastest way to check everything is wired correctly without writing any curl commands.
@@ -90,10 +117,14 @@ Open **http://localhost:5189/** — it serves a plain HTML+JS test console (`www
 | GET | `/` | HTML test console (`wwwroot/index.html`) |
 | GET | `/api/info` | Service info (JSON) |
 | GET | `/openapi/v1.json` | OpenAPI description of the endpoints below |
-| GET | `/health` | `200` if Foundry Local's endpoint is reachable, `503` if not, with a JSON reason |
+| GET | `/health` | `Healthy` (200) if Foundry Local is reachable and the configured model is loaded, `Degraded` (200) if the model isn't loaded, `Unhealthy` (503) if unreachable; JSON body gives the reason |
+| POST | `/api/conversations` | Starts a server-side conversation and returns its id |
+| GET | `/api/conversations/{id}` | Returns a conversation's transcript |
+| DELETE | `/api/conversations/{id}` | Deletes a conversation |
 | POST | `/api/chat` | Plain chat via `IChatClient` (Microsoft.Extensions.AI) |
 | POST | `/api/chat/stream` | Streaming variant of the above, as Server-Sent Events |
-| POST | `/api/agent` | Semantic Kernel chat with function-calling enabled (`TimePlugin`) |
+| POST | `/api/agent` | Semantic Kernel chat with function-calling enabled (current time and arithmetic tools) |
+| POST | `/api/agent/stream` | Streaming variant of the agent endpoint, as Server-Sent Events |
 | GET | `/api/foundry/models` | Lists the local Foundry model catalog via the native SDK |
 
 Example requests:
@@ -109,6 +140,17 @@ curl -X POST http://localhost:5189/api/agent \
 
 curl http://localhost:5189/api/foundry/models
 ```
+
+### Agent tools
+
+The agent endpoints let the model call these functions when it decides they help:
+
+| Plugin | Functions |
+|---|---|
+| `TimePlugin` | `GetCurrentTime` — the server's local date and time |
+| `MathPlugin` | `Add`, `Subtract`, `Multiply`, `Divide` — exact arithmetic, which language models are unreliable at |
+
+To add a tool, write a plugin class under `Plugins/` and register it in `AddAgentPlugins()` (`Extensions/ServiceCollectionExtensions.cs`). Very small models (such as `qwen2.5-0.5b`) often ignore or misuse tools; try a larger one if the agent doesn't call them.
 
 ### Multi-turn conversations
 
@@ -136,7 +178,32 @@ curl -X POST http://localhost:5189/api/chat \
   -d '{"message":"What is the capital of France?","model":"phi-4-mini"}'
 ```
 
-The browser test console has a **Model** dropdown filled from the catalog, and keeps conversations for you: each panel keeps its transcript until you click **New conversation**.
+The browser test console has a **Model** dropdown filled from the catalog.
+
+### Server-side conversations
+
+Instead of resending `history`, you can let the server keep the transcript:
+
+```bash
+# 1. Create a conversation; the response is {"id":"<conversation id>"}
+curl -X POST http://localhost:5189/api/conversations
+
+# 2. Send only the new message plus the id, as many times as you like
+curl -X POST http://localhost:5189/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"What is the capital of France?","conversationId":"<conversation id>"}'
+
+# 3. Read the transcript back, or delete it
+curl http://localhost:5189/api/conversations/<conversation id>
+curl -X DELETE http://localhost:5189/api/conversations/<conversation id>
+```
+
+- One conversation can be used across the chat, streaming and agent endpoints.
+- An exchange is recorded only when the model replied in full, so a failed request can simply be retried.
+- Conversations are kept **in memory**: they survive a page reload but not an app restart. They are also discarded after `Conversations:IdleTimeoutMinutes` (default 120) without use, or when more than `Conversations:MaxConversations` (default 200) exist (least recently used first). Only the most recent 50 turns are kept.
+- An unknown or expired id returns `404`. Sending both `conversationId` and `history` returns `400`.
+
+The browser test console uses this: each panel remembers its conversation id in the browser, so the transcript is still there after a reload, until you click **New conversation**.
 
 ## Validation and error responses
 
@@ -144,6 +211,7 @@ Chat and agent requests are validated before reaching the model, otherwise the A
 
 - `message` must be present, non-blank and at most 8000 characters.
 - `model` is optional; if given it must be 1-100 characters of letters, digits, `.`, `-`, `_` or `:`.
+- `conversationId` is optional; it can't be combined with `history`.
 - `history` is optional, at most 50 turns. Each turn needs a `role` of `user` or `assistant` (`system` is rejected so callers can't override the agent's instructions) and non-blank `content` of at most 8000 characters.
 
 Failures are handled centrally by `FoundryLocalExceptionHandler`, which logs them and returns [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457):
@@ -151,12 +219,13 @@ Failures are handled centrally by `FoundryLocalExceptionHandler`, which logs the
 | Status | When |
 |---|---|
 | `400` | Invalid request body (see above) |
+| `404` | The `conversationId` doesn't exist or has expired |
 | `502` | Foundry Local responded with an error — typically the configured `ModelId` isn't loaded |
 | `503` | Foundry Local couldn't be reached — daemon not running, or on a different port than `Endpoint` |
 | `504` | Foundry Local didn't answer within `RequestTimeoutSeconds` |
 | `500` | Any other, unexpected error (a bug in this app — check the logs) |
 
-`/api/chat/stream` responds with `text/event-stream`. Errors that occur before the first token get the status codes above. After that the status is already `200`, so the outcome is reported in the stream itself:
+`/api/chat/stream` and `/api/agent/stream` respond with `text/event-stream`. Errors that occur before the first token get the status codes above. After that the status is already `200`, so the outcome is reported in the stream itself:
 
 ```
 event: token
@@ -178,7 +247,7 @@ The tests don't need Foundry Local: they host the app in-memory with `WebApplica
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every pull request and push to `main`: restore, build with warnings as errors (including missing XML docs), and run the tests.
+`.github/workflows/ci.yml` runs on every pull request and push to `main`: restore, build with warnings as errors (including missing XML docs), and run the tests. A second job builds the Docker image and checks that the container starts.
 
 Dependabot (`.github/dependabot.yml`) opens weekly pull requests for NuGet and GitHub Actions updates, which CI then checks. The Semantic Kernel, Microsoft.Extensions.AI and Foundry Local packages are updated together as one group.
 
@@ -191,10 +260,11 @@ LocalFoundry.Api/
   Endpoints/                                 One class per endpoint group (info, health, chat, agent, models)
   Health/FoundryLocalHealthCheck.cs          Probes Foundry Local's /models endpoint for GET /health
   Timeouts/ModelRequestTimeout.cs            504 timeout policy for endpoints that call the model
+  Conversations/                             Server-side transcripts: IConversationStore (+ in-memory store) and ConversationSession
   ErrorHandling/                             Maps Foundry Local failures to 502/503 ProblemDetails
   Validation/                                ChatRequest validator + endpoint filter
-  Options/                                   FoundryLocal (endpoint, model, timeout) and Agent (system prompt) settings + validation
-  Plugins/TimePlugin.cs                      Sample Semantic Kernel function
+  Options/                                   FoundryLocal, Agent and Conversations settings + validation
+  Plugins/                                   Tools the agent can call: TimePlugin (current time), MathPlugin (arithmetic)
   Models/ChatDtos.cs                         Request/response records
   Services/IKernelProvider.cs                Builds the Semantic Kernel for a given model (+ FoundryLocalKernelProvider)
   Services/ModelRoutingChatClient.cs         IChatClient that routes each call to the requested model's kernel
@@ -202,6 +272,7 @@ LocalFoundry.Api/
   Services/IModelCatalogService.cs           Model catalog abstraction (+ FoundryLocalCatalogService, lazy SDK wrapper)
   wwwroot/index.html                         Browser test console for all endpoints
 LocalFoundry.Api.Tests/                      xUnit unit and in-memory HTTP tests
+Dockerfile, docker-compose.yml               Container image for the API (Foundry Local stays on the host)
 Directory.Packages.props                     NuGet package versions for both projects (central package management)
 LICENSE                                      Apache License 2.0
 .github/workflows/ci.yml                     Build and test on pull requests and pushes to main

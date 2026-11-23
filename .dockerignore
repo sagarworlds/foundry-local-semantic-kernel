@@ -1,0 +1,11 @@
+# Keep the build context small and stop host build output from leaking into the image.
+**/bin/
+**/obj/
+.git/
+.github/
+.vs/
+.vscode/
+LocalFoundry.Api.Tests/
+*.md
+Dockerfile
+docker-compose.yml

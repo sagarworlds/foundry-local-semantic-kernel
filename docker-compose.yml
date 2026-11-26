@@ -7,7 +7,9 @@ services:
   api:
     build: .
     ports:
-      - "5189:8080"
+      # Bound to 127.0.0.1 so only this machine can reach the API. A bare "5189:8080" would
+      # publish it on every network interface, and the API has no login.
+      - "127.0.0.1:5189:8080"
     environment:
       FoundryLocal__Endpoint: http://host.docker.internal:5273/v1
       FoundryLocal__ModelId: qwen2.5-0.5b

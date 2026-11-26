@@ -97,12 +97,13 @@ or without Compose:
 
 ```bash
 docker build -t localfoundry-api .
-docker run --rm -p 5189:8080 --add-host=host.docker.internal:host-gateway localfoundry-api
+docker run --rm -p 127.0.0.1:5189:8080 --add-host=host.docker.internal:host-gateway localfoundry-api
 ```
 
 - The image sets `FoundryLocal__Endpoint=http://host.docker.internal:5273/v1`. Override any setting with an environment variable, using `__` for `:` (for example `-e FoundryLocal__ModelId=phi-4-mini`).
 - **Docker Desktop (Windows/macOS):** `host.docker.internal` reaches Foundry Local on the host as is.
-- **Linux:** Foundry Local listens only on `127.0.0.1`, which a container on the default bridge network can't reach. Use host networking instead: `docker run --rm --network host -e FoundryLocal__Endpoint=http://localhost:5273/v1 localfoundry-api` (the API is then on port 8080).
+- **Linux:** Foundry Local listens only on `127.0.0.1`, which a container on the default bridge network can't reach. Use host networking instead: `docker run --rm --network host -e FoundryLocal__Endpoint=http://localhost:5273/v1 localfoundry-api` (the API is then on port 8080). Host networking has no port mapping to restrict, so also add `-e ASPNETCORE_URLS=http://127.0.0.1:8080`; otherwise the API is reachable from your whole network.
+- **Keep the port on 127.0.0.1.** The API has no authentication, and anyone who can reach it can use your model. That is why the examples publish the port as `127.0.0.1:5189:8080` rather than `5189:8080`, which would expose it on every network interface. Only drop the `127.0.0.1:` prefix if you have put something in front of it that restricts access.
 - The container listens on port 8080 and runs as a non-root user. `GET /health` tells you whether it can reach Foundry Local.
 - The image leaves out the SDK's GPU (CUDA) libraries, since no inference happens in the container.
 

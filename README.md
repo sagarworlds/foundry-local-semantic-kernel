@@ -246,6 +246,36 @@ dotnet test LocalFoundry.Api.Tests
 
 The tests don't need Foundry Local: they host the app in-memory with `WebApplicationFactory` and replace `IChatClient`, `IAgentService` and `IModelCatalogService` with fakes.
 
+### Integration tests against a real Foundry Local (optional)
+
+The tests above use fakes, so they can't catch a wrong assumption about how Foundry Local really behaves. A second set runs the app against the real thing. They **skip themselves** unless you opt in, and CI doesn't run them (Foundry Local isn't available there).
+
+```powershell
+foundry server start --port 5273
+foundry model download qwen2.5-0.5b
+foundry model load qwen2.5-0.5b
+
+$env:FOUNDRY_LOCAL_TESTS = "1"          # bash: FOUNDRY_LOCAL_TESTS=1 dotnet test ...
+dotnet test LocalFoundry.Api.Tests --filter "FullyQualifiedName~Integration"
+```
+
+| Environment variable | Effect |
+|---|---|
+| `FOUNDRY_LOCAL_TESTS=1` | Runs the integration tests. |
+| `FOUNDRY_LOCAL_TESTS_BEHAVIOUR=1` | Also runs the tests whose result depends on how capable the loaded model is. Small models often fail these, so they are a separate switch. |
+| `FOUNDRY_LOCAL_TESTS_ENDPOINT` | Foundry Local's URL, if not `http://localhost:5273/v1`. |
+| `FOUNDRY_LOCAL_TESTS_MODEL` | Model alias to test with, if not `qwen2.5-0.5b`. |
+
+What they check:
+
+- `/health` reports the model as loaded, and `/api/foundry/models` lists it (this uses Foundry Local's own SDK, so it needs internet access to Microsoft's model catalog).
+- Chat and streaming return a reply in the expected format.
+- Naming the model explicitly works, and naming an unknown one returns `502` with Foundry Local's message.
+- A server-side conversation records each exchange.
+- With the behaviour switch: a follow-up question recalls an earlier turn, and the agent uses the calculator tool.
+
+If you opt in but Foundry Local isn't answering, the tests **fail** with the commands to start it, rather than skip. The first run can be slow while the model loads. A `Degraded` health result means no loaded model matched the alias; the failure message lists the model ids Foundry Local reported, which shows whether the model isn't loaded or the matching rule needs adjusting.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every pull request and push to `main`: restore, build with warnings as errors (including missing XML docs), and run the tests. A second job builds the Docker image and checks that the container starts.
@@ -272,7 +302,7 @@ LocalFoundry.Api/
   Services/IAgentService.cs                  Tool-calling agent abstraction (+ SemanticKernelAgentService)
   Services/IModelCatalogService.cs           Model catalog abstraction (+ FoundryLocalCatalogService, lazy SDK wrapper)
   wwwroot/index.html                         Browser test console for all endpoints
-LocalFoundry.Api.Tests/                      xUnit unit and in-memory HTTP tests
+LocalFoundry.Api.Tests/                      xUnit unit and in-memory HTTP tests; Integration/ holds the opt-in tests against a real Foundry Local
 Dockerfile, docker-compose.yml               Container image for the API (Foundry Local stays on the host)
 Directory.Packages.props                     NuGet package versions for both projects (central package management)
 LICENSE                                      Apache License 2.0
